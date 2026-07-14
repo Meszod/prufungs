@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schreibprüfung · B1 Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F4EC;
+    --paper-line:#DCD5C1;
+    --ink:#1C2541;
+    --ink-soft:#4B547A;
+    --ink-faint:#8B92AD;
+    --stamp-red:#AE2E2E;
+    --stamp-red-soft:#c85a5a;
+    --gold:#9C7B2E;
+    --green:#3E7A5C;
+    --card:#FFFEFB;
+    --shadow: 0 1px 0 rgba(28,37,65,0.06), 0 8px 24px -12px rgba(28,37,65,0.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(174,46,46,0.05), transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+    padding:0 0 60px 0;
+  }
+  .noise{
+    position:fixed; inset:0; pointer-events:none; opacity:0.035; z-index:0;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ===== Header / Amtskopf ===== */
+  header{
+    position:relative; z-index:1;
+    border-bottom:2px solid var(--ink);
+    padding:22px 32px 16px 32px;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    flex-wrap:wrap; gap:14px;
+  }
+  .brand-eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--ink-soft); margin:0 0 6px 0;
+  }
+  h1{
+    font-family:'Fraunces', serif; font-weight:600; font-optical-sizing:auto;
+    font-size:clamp(28px,4vw,40px); margin:0; line-height:1.02; letter-spacing:-0.01em;
+  }
+  .header-right{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); }
+  .stamp-badge{
+    width:78px; height:78px; border-radius:50%;
+    border:2.5px solid var(--stamp-red);
+    color:var(--stamp-red);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    transform:rotate(-8deg);
+    font-family:'IBM Plex Mono', monospace; font-weight:700;
+    text-align:center; line-height:1.1;
+    box-shadow: 0 0 0 3px rgba(174,46,46,0.06);
+    flex-shrink:0;
+  }
+  .stamp-badge span:first-child{ font-size:20px; }
+  .stamp-badge span:last-child{ font-size:8.5px; letter-spacing:0.08em; }
+
+  main{ position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:28px 32px; }
+  .intro-note{
+    font-size:13.5px; color:var(--ink-soft); max-width:640px; margin:0 0 26px 0; line-height:1.55;
+  }
+  .intro-note b{ color:var(--ink); }
+
+  /* ===== Category tabs ===== */
+  .tabs{ display:flex; gap:8px; margin-bottom:22px; flex-wrap:wrap; }
+  .tab{
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.03em;
+    padding:9px 16px; border:1.5px solid var(--ink); border-radius:999px;
+    background:transparent; color:var(--ink); cursor:pointer;
+    transition:all .15s ease;
+  }
+  .tab:hover{ background:rgba(28,37,65,0.05); }
+  .tab.active{ background:var(--ink); color:var(--paper); }
+
+  /* ===== Layout grid ===== */
+  .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
+  @media (max-width:920px){ .grid{ grid-template-columns:1fr; } }
+
+  /* ===== Task card (Aufgabenblatt) ===== */
+  .card{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px;
+    box-shadow:var(--shadow); padding:26px 26px 22px 26px; position:relative;
+  }
+  .card::before{
+    content:""; position:absolute; top:0; left:26px; right:26px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--stamp-red) 0 10px, transparent 10px 20px);
+    opacity:0.5;
+  }
+  .task-meta{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .task-tag{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--gold); font-weight:600;
+  }
+  .task-id{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-faint); }
+  .task-title{ font-family:'Fraunces', serif; font-weight:600; font-size:21px; margin:0 0 12px 0; }
+  .task-context{ font-size:14.5px; line-height:1.6; color:var(--ink-soft); margin-bottom:14px; }
+  .leitpunkte{ list-style:none; margin:0; padding:0; }
+  .leitpunkte li{
+    font-size:14.5px; line-height:1.5; padding:9px 0 9px 26px; position:relative;
+    border-top:1px dashed var(--paper-line);
+  }
+  .leitpunkte li:first-child{ border-top:1px dashed var(--paper-line); }
+  .leitpunkte li::before{
+    content:"—"; position:absolute; left:2px; color:var(--stamp-red); font-weight:700;
+  }
+  .task-footer{
+    display:flex; gap:18px; margin-top:16px; padding-top:14px; border-top:1px solid var(--paper-line);
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft); flex-wrap:wrap;
+  }
+  .task-footer b{ color:var(--ink); }
+
+  .new-task-btn{
+    margin-top:16px; width:100%; padding:12px; border-radius:2px;
+    border:1.5px solid var(--ink); background:var(--ink); color:var(--paper);
+    font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:13.5px; letter-spacing:0.01em;
+    cursor:pointer; transition:all .15s ease;
+  }
+  .new-task-btn:hover{ background:var(--ink-soft); border-color:var(--ink-soft); }
+
+  /* ===== Right column: timer + writing ===== */
+  .panel{ display:flex; flex-direction:column; gap:16px; }
+  .timer-row{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:18px 22px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .timer-display{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:38px; letter-spacing:0.01em;
+    color:var(--ink); font-variant-numeric:tabular-nums;
+  }
+  .timer-display.warn{ color:var(--stamp-red); }
+  .timer-label{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:2px;}
+  .timer-controls{ display:flex; gap:8px; align-items:center; }
+  .btn{
+    font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:13px;
+    padding:9px 16px; border-radius:2px; cursor:pointer; border:1.5px solid var(--ink);
+    background:transparent; color:var(--ink); transition:all .15s ease;
+  }
+  .btn:hover{ background:rgba(28,37,65,0.05); }
+  .btn.primary{ background:var(--ink); color:var(--paper); }
+  .btn.primary:hover{ background:var(--ink-soft); border-color:var(--ink-soft); }
+  .btn.danger{ border-color:var(--stamp-red); color:var(--stamp-red); }
+  .btn.danger:hover{ background:rgba(174,46,46,0.06); }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; }
+  select.timer-select{
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; padding:7px 8px;
+    border:1.5px solid var(--ink); border-radius:2px; background:var(--card); color:var(--ink);
+  }
+
+  .paper-wrap{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:20px 22px 16px 22px; position:relative;
+  }
+  .paper-header{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .paper-title{ font-family:'Fraunces', serif; font-weight:600; font-size:16px; }
+  textarea{
+    width:100%; min-height:300px; resize:vertical;
+    border:none; outline:none; background:
+      repeating-linear-gradient(var(--card) 0 31px, var(--paper-line) 31px 32px);
+    line-height:32px; font-family:'IBM Plex Sans', sans-serif; font-size:15.5px; color:var(--ink);
+    padding-top:2px;
+  }
+  textarea::placeholder{ color:var(--ink-faint); font-style:italic; }
+
+  .stats-row{
+    display:flex; gap:0; margin-top:14px; border-top:1px solid var(--paper-line); padding-top:14px;
+    flex-wrap:wrap;
+  }
+  .stat{
+    flex:1; min-width:90px; text-align:center; border-right:1px dashed var(--paper-line); padding:0 8px;
+  }
+  .stat:last-child{ border-right:none; }
+  .stat-num{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:24px; color:var(--ink); }
+  .stat-num.ok{ color:var(--green); }
+  .stat-label{ font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-faint); margin-top:2px;}
+
+  .progress-track{ height:6px; background:var(--paper); border:1px solid var(--paper-line); border-radius:99px; margin-top:14px; overflow:hidden; }
+  .progress-fill{ height:100%; background:var(--stamp-red); width:0%; transition:width .25s ease; border-radius:99px; }
+  .progress-fill.ok{ background:var(--green); }
+
+  .actions-row{ display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+
+  /* stamp overlay for finish */
+  .finish-stamp{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-12deg) scale(0.6);
+    width:220px; height:220px; border-radius:50%; border:5px solid var(--stamp-red); color:var(--stamp-red);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center;
+    font-family:'IBM Plex Mono', monospace; font-weight:700; letter-spacing:0.06em; z-index:50;
+    opacity:0; pointer-events:none; transition:all .35s cubic-bezier(.2,1.4,.4,1); background:rgba(247,244,236,0.0);
+  }
+  .finish-stamp.show{ opacity:0.92; transform:translate(-50%,-50%) rotate(-12deg) scale(1); }
+  .finish-stamp span:first-child{ font-size:30px; margin-bottom:4px; }
+  .finish-stamp span:last-child{ font-size:11px; }
+
+  footer{
+    max-width:1180px; margin:30px auto 0 auto; padding:16px 32px 0 32px;
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-faint);
+    border-top:1px dashed var(--paper-line);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+
+  /* ===== AI Feedback panel ===== */
+  .feedback-panel{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:22px 24px; margin-top:16px; position:relative;
+  }
+  .feedback-panel::before{
+    content:""; position:absolute; top:0; left:24px; right:24px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--green) 0 10px, transparent 10px 20px);
+    opacity:0.5;
+  }
+  .fb-header{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:16px; flex-wrap:wrap; }
+  .fb-title{ font-family:'Fraunces', serif; font-weight:600; font-size:18px; }
+  .fb-score{
+    display:flex; align-items:center; gap:10px; font-family:'IBM Plex Mono', monospace;
+  }
+  .fb-score-num{
+    width:56px; height:56px; border-radius:50%; border:2.5px solid var(--green); color:var(--green);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:17px; flex-shrink:0;
+  }
+  .fb-score-num.mid{ border-color:var(--gold); color:var(--gold); }
+  .fb-score-num.low{ border-color:var(--stamp-red); color:var(--stamp-red); }
+  .fb-score-label{ font-size:10.5px; color:var(--ink-faint); letter-spacing:0.06em; text-transform:uppercase; line-height:1.3; }
+
+  .fb-section{ margin-bottom:16px; }
+  .fb-section:last-child{ margin-bottom:0; }
+  .fb-section-title{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.09em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:8px; font-weight:600;
+  }
+  .fb-section p{ font-size:14px; line-height:1.6; color:var(--ink); margin:0; }
+
+  .fb-checklist{ list-style:none; margin:0; padding:0; }
+  .fb-checklist li{ font-size:13.5px; line-height:1.55; padding:6px 0 6px 26px; position:relative; }
+  .fb-checklist li.yes::before{ content:"✓"; position:absolute; left:0; color:var(--green); font-weight:700; }
+  .fb-checklist li.no::before{ content:"✗"; position:absolute; left:0; color:var(--stamp-red); font-weight:700; }
+
+  .fb-issues{ list-style:none; margin:0; padding:0; }
+  .fb-issues li{
+    font-size:13.5px; line-height:1.55; padding:10px 0; border-top:1px dashed var(--paper-line);
+  }
+  .fb-issues li:first-child{ border-top:1px dashed var(--paper-line); }
+  .fb-wrong{ color:var(--stamp-red); text-decoration:line-through; }
+  .fb-right{ color:var(--green); font-weight:600; }
+
+  .fb-loading{
+    display:flex; align-items:center; gap:10px; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--ink-soft);
+  }
+  .fb-spinner{
+    width:16px; height:16px; border:2.5px solid var(--paper-line); border-top-color:var(--stamp-red);
+    border-radius:50%; animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .fb-error{ color:var(--stamp-red); font-size:13.5px; }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+
+<header>
+  <div>
+    <p class="brand-eyebrow">Prüfungsvorbereitung · Modul Schreiben</p>
+    <h1>Schreibprüfung&nbsp;Trainer</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:16px;">
+    <div class="header-right">
+      Niveau B1<br>Simulierte Prüfung
+    </div>
+    <div class="stamp-badge"><span>B1</span><span>GEPRÜFT</span></div>
+  </div>
+</header>
+
+<main>
+  <p class="intro-note">Bu vosita nemis tili <b>B1 darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.</p>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="grid">
+    <!-- LEFT: Task card -->
+    <div class="card" id="taskCard">
+      <!-- filled by JS -->
+    </div>
+
+    <!-- RIGHT: Timer + writing -->
+    <div class="panel">
+      <div class="timer-row">
+        <div>
+          <div class="timer-label" id="timerStateLabel">Bereit</div>
+          <div class="timer-display" id="timerDisplay">15:00</div>
+        </div>
+        <div class="timer-controls">
+          <select class="timer-select" id="timerSelect">
+            <option value="600">10 daqiqa</option>
+            <option value="900" selected>15 daqiqa</option>
+            <option value="1500">25 daqiqa</option>
+            <option value="1800">30 daqiqa</option>
+          </select>
+          <button class="btn primary" id="startBtn">Boshlash</button>
+          <button class="btn" id="pauseBtn" disabled>Pauza</button>
+          <button class="btn danger" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="paper-wrap">
+        <div class="paper-header">
+          <div class="paper-title">Sizning matningiz</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint);" id="targetHint"></div>
+        </div>
+        <textarea id="writingArea" placeholder="Hier schreiben... (Yozishni shu yerda boshlang)"></textarea>
+
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+
+        <div class="stats-row">
+          <div class="stat"><div class="stat-num" id="wordCount">0</div><div class="stat-label">So'zlar</div></div>
+          <div class="stat"><div class="stat-num" id="sentenceCount">0</div><div class="stat-label">Gaplar</div></div>
+          <div class="stat"><div class="stat-num" id="charCount">0</div><div class="stat-label">Belgilar</div></div>
+          <div class="stat"><div class="stat-num" id="paraCount">0</div><div class="stat-label">Abzatslar</div></div>
+        </div>
+
+        <div class="actions-row">
+          <button class="btn primary" id="finishBtn">Yakunlash</button>
+          <button class="btn" id="checkBtn">AI bilan tekshirish</button>
+          <button class="btn" id="downloadBtn">Matnni yuklab olish (.txt)</button>
+          <button class="btn" id="clearBtn">Tozalash</button>
+        </div>
+      </div>
+
+      <div class="feedback-panel" id="feedbackPanel" style="display:none;"></div>
+    </div>
+  </div>
+</main>
+
+<footer>SCHREIBEN·TRAINER — B1 — Übungsmodus, kein offizielles Prüfungsdokument</footer>
+
+<div class="finish-stamp" id="finishStamp"><span>FERTIG</span><span id="finishSub">0 Wörter</span></div>
+
+<script>
+(function(){
+
+  /* ================= TASK BANK ================= */
+  const TASKS = {
+    teil1: {
+      label: "Teil 1 · Persönliche E-Mail",
+      target: 80,
+      defaultTime: 900,
+      items: [
+        {
+          title: "Umzug in eine neue Stadt",
+          context: "Ihre Freundin Lena hat Ihnen geschrieben, dass Sie beruflich in eine neue Stadt umziehen müssen. Sie ist unsicher und bittet Sie um Rat.",
+          points: [
+            "Reagieren Sie auf die Nachricht von Lena.",
+            "Berichten Sie von Ihrer eigenen Erfahrung mit einem Umzug oder einer großen Veränderung.",
+            "Geben Sie Lena drei praktische Tipps für den Neuanfang.",
+            "Schlagen Sie vor, wie Sie in Kontakt bleiben können."
+          ]
+        },
+        {
+          title: "Einladung zur Geburtstagsfeier",
+          context: "Ihr Freund Markus feiert seinen 30. Geburtstag und lädt Sie zu einer Party ein. Sie können leider nicht persönlich kommen.",
+          points: [
+            "Bedanken Sie sich für die Einladung.",
+            "Erklären Sie, warum Sie nicht kommen können.",
+            "Machen Sie einen Vorschlag, wie Sie trotzdem gratulieren möchten.",
+            "Fragen Sie, wann Sie sich stattdessen treffen können."
+          ]
+        },
+        {
+          title: "Gemeinsamer Urlaub",
+          context: "Ihre Freundin Anna schlägt vor, gemeinsam Urlaub zu machen. Sie schreibt Ihnen drei mögliche Reiseziele.",
+          points: [
+            "Reagieren Sie auf den Vorschlag von Anna.",
+            "Sagen Sie, welches Reiseziel Sie bevorzugen und warum.",
+            "Beschreiben Sie, was Sie im Urlaub gern unternehmen.",
+            "Fragen Sie nach dem Budget und dem Zeitraum."
+          ]
+        },
+        {
+          title: "Neue Wohnung gefunden",
+          context: "Sie haben endlich eine neue Wohnung gefunden und schreiben Ihrem Freund Tom davon.",
+          points: [
+            "Berichten Sie, wie Sie die Wohnung gefunden haben.",
+            "Beschreiben Sie die Wohnung kurz (Lage, Größe, Miete).",
+            "Erzählen Sie, was Sie an der Wohnung besonders mögen.",
+            "Laden Sie Tom ein, Sie bald zu besuchen."
+          ]
+        },
+        {
+          title: "Sportverein",
+          context: "Ihre Bekannte Julia möchte mit dem Sport anfangen und fragt Sie um Empfehlung, da Sie regelmäßig trainieren.",
+          points: [
+            "Erzählen Sie, welchen Sport Sie machen und warum.",
+            "Berichten Sie von Ihren eigenen Erfahrungen als Anfänger.",
+            "Geben Sie Julia zwei konkrete Tipps für den Einstieg.",
+            "Schlagen Sie vor, gemeinsam zu trainieren."
+          ]
+        },
+        {
+          title: "Krankheit eines Freundes",
+          context: "Ihr Freund Paul liegt seit einer Woche mit Grippe im Bett und langweilt sich zu Hause.",
+          points: [
+            "Wünschen Sie Paul gute Besserung.",
+            "Erzählen Sie von einer eigenen Erfahrung mit Krankheit.",
+            "Schlagen Sie vor, was er tun kann, um sich die Zeit zu vertreiben.",
+            "Bieten Sie Ihre Hilfe an (z. B. Einkaufen)."
+          ]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Forumsbeitrag / Meinung",
+      target: 90,
+      defaultTime: 1500,
+      items: [
+        {
+          title: "Homeoffice — Fluch oder Segen?",
+          context: "In einem Online-Forum wird diskutiert, ob Homeoffice die Zukunft der Arbeit ist. Schreiben Sie einen Beitrag zu diesem Thema.",
+          points: [
+            "Beschreiben Sie kurz die Situation in Ihrem Heimatland.",
+            "Nennen Sie zwei Vorteile des Homeoffice.",
+            "Nennen Sie zwei Nachteile des Homeoffice.",
+            "Geben Sie Ihre persönliche Meinung dazu ab."
+          ]
+        },
+        {
+          title: "Soziale Medien im Alltag",
+          context: "Im Forum 'Leben heute' wird gefragt, ob soziale Medien unser Leben eher verbessern oder verschlechtern.",
+          points: [
+            "Beschreiben Sie, wie oft und wofür Sie soziale Medien nutzen.",
+            "Nennen Sie Vorteile der sozialen Medien.",
+            "Nennen Sie mögliche Gefahren oder Nachteile.",
+            "Sagen Sie, was sich in Zukunft ändern sollte."
+          ]
+        },
+        {
+          title: "Sollte Schuluniform Pflicht sein?",
+          context: "Eine Schule diskutiert die Einführung einer Schuluniform. Nehmen Sie im Forum Stellung.",
+          points: [
+            "Erklären Sie kurz, wie es an Schulen in Ihrem Land ist.",
+            "Nennen Sie Argumente dafür.",
+            "Nennen Sie Argumente dagegen.",
+            "Formulieren Sie Ihre eigene Meinung."
+          ]
+        },
+        {
+          title: "Leben auf dem Land vs. in der Stadt",
+          context: "Im Forum wird gefragt, wo man besser lebt: auf dem Land oder in der Stadt.",
+          points: [
+            "Beschreiben Sie, wo Sie momentan leben und warum.",
+            "Nennen Sie Vorteile des Stadtlebens.",
+            "Nennen Sie Vorteile des Landlebens.",
+            "Sagen Sie, wo Sie in Zukunft leben möchten."
+          ]
+        },
+        {
+          title: "Fast Food und gesunde Ernährung",
+          context: "Ein Ernährungsforum diskutiert, warum Fast Food trotz bekannter Nachteile so beliebt bleibt.",
+          points: [
+            "Beschreiben Sie Ihre eigenen Essgewohnheiten kurz.",
+            "Nennen Sie Gründe für die Beliebtheit von Fast Food.",
+            "Nennen Sie gesundheitliche Risiken.",
+            "Geben Sie einen Vorschlag, wie man sich gesünder ernähren kann."
+          ]
+        },
+        {
+          title: "Sind Haustiere in der Stadt sinnvoll?",
+          context: "Ein Forum für Tierfreunde diskutiert, ob es fair ist, große Hunde in kleinen Stadtwohnungen zu halten.",
+          points: [
+            "Sagen Sie, ob Sie ein Haustier haben oder hatten.",
+            "Nennen Sie Vorteile von Haustieren in der Stadt.",
+            "Nennen Sie mögliche Probleme.",
+            "Geben Sie Ihre persönliche Meinung ab."
+          ]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formelle E-Mail",
+      target: 50,
+      defaultTime: 600,
+      items: [
+        {
+          title: "Reklamation: Beschädigte Ware",
+          context: "Sie haben online eine Lampe bestellt, die beschädigt angekommen ist. Schreiben Sie eine formelle E-Mail an den Kundenservice.",
+          points: [
+            "Beschreiben Sie das Problem.",
+            "Nennen Sie die Bestellnummer (frei erfunden).",
+            "Fordern Sie eine Lösung (Ersatz oder Rückerstattung)."
+          ]
+        },
+        {
+          title: "Terminabsage beim Arzt",
+          context: "Sie haben morgen einen Termin bei Ihrem Hausarzt, können aber nicht kommen. Schreiben Sie eine formelle E-Mail an die Praxis.",
+          points: [
+            "Sagen Sie den Termin ab.",
+            "Nennen Sie kurz einen Grund.",
+            "Bitten Sie um einen neuen Termin."
+          ]
+        },
+        {
+          title: "Anfrage an eine Sprachschule",
+          context: "Sie interessieren sich für einen B2-Kurs an einer Sprachschule und haben noch Fragen.",
+          points: [
+            "Stellen Sie sich kurz vor.",
+            "Fragen Sie nach Kurszeiten und Preisen.",
+            "Fragen Sie, wie Sie sich anmelden können."
+          ]
+        },
+        {
+          title: "Beschwerde über Lärm im Haus",
+          context: "Ihre Nachbarn sind seit einigen Wochen sehr laut. Schreiben Sie eine formelle E-Mail an die Hausverwaltung.",
+          points: [
+            "Beschreiben Sie das Problem konkret.",
+            "Erklären Sie, wie es Sie beeinträchtigt.",
+            "Bitten Sie um eine Maßnahme."
+          ]
+        },
+        {
+          title: "Kündigung eines Fitnessvertrags",
+          context: "Sie möchten Ihren Vertrag im Fitnessstudio kündigen, da Sie umziehen. Schreiben Sie eine formelle E-Mail.",
+          points: [
+            "Kündigen Sie den Vertrag höflich.",
+            "Nennen Sie den Grund (Umzug).",
+            "Fragen Sie nach den nächsten Schritten."
+          ]
+        }
+      ]
+    }
+  };
+
+  /* ================= STATE ================= */
+  let currentCategory = "teil1";
+  let currentTask = null;
+  let timerSeconds = 900;
+  let timerRemaining = 900;
+  let timerInterval = null;
+  let timerRunning = false;
+
+  const tabsEl = document.getElementById('tabs');
+  const taskCard = document.getElementById('taskCard');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const timerStateLabel = document.getElementById('timerStateLabel');
+  const timerSelect = document.getElementById('timerSelect');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const writingArea = document.getElementById('writingArea');
+  const wordCountEl = document.getElementById('wordCount');
+  const sentenceCountEl = document.getElementById('sentenceCount');
+  const charCountEl = document.getElementById('charCount');
+  const paraCountEl = document.getElementById('paraCount');
+  const progressFill = document.getElementById('progressFill');
+  const targetHint = document.getElementById('targetHint');
+  const finishBtn = document.getElementById('finishBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const finishStamp = document.getElementById('finishStamp');
+  const finishSub = document.getElementById('finishSub');
+
+  /* ================= TABS ================= */
+  function renderTabs(){
+    tabsEl.innerHTML = '';
+    Object.keys(TASKS).forEach(key=>{
+      const btn = document.createElement('button');
+      btn.className = 'tab' + (key===currentCategory ? ' active':'');
+      btn.textContent = TASKS[key].label;
+      btn.onclick = ()=>{ currentCategory = key; renderTabs(); pickTask(true); };
+      tabsEl.appendChild(btn);
+    });
+  }
+
+  /* ================= TASK ================= */
+  function pickTask(resetTimerToDefault){
+    const pool = TASKS[currentCategory].items;
+    let next;
+    do { next = pool[Math.floor(Math.random()*pool.length)]; }
+    while (pool.length > 1 && currentTask && next.title === currentTask.title);
+    currentTask = next;
+    renderTaskCard();
+    if(resetTimerToDefault){
+      timerSeconds = TASKS[currentCategory].defaultTime;
+      timerSelect.value = String(timerSeconds);
+      resetTimer();
+    }
+    updateTargetHint();
+  }
+
+  function renderTaskCard(){
+    const cat = TASKS[currentCategory];
+    taskCard.innerHTML = `
+      <div class="task-meta">
+        <div class="task-tag">${cat.label}</div>
+        <div class="task-id">ZIEL: ${cat.target} WÖRTER</div>
+      </div>
+      <div class="task-title">${currentTask.title}</div>
+      <div class="task-context">${currentTask.context}</div>
+      <ul class="leitpunkte">
+        ${currentTask.points.map(p=>`<li>${p}</li>`).join('')}
+      </ul>
+      <div class="task-footer">
+        <span>Empf. Zeit: <b>${Math.round(cat.defaultTime/60)} Min.</b></span>
+        <span>Anrede & Grußformel nicht vergessen</span>
+      </div>
+      <button class="new-task-btn" id="newTaskBtn">Yangi mavzu ↻</button>
+    `;
+    document.getElementById('newTaskBtn').onclick = ()=> pickTask(false);
+  }
+
+  function updateTargetHint(){
+    targetHint.textContent = `Ziel: ~${TASKS[currentCategory].target} Wörter`;
+  }
+
+  /* ================= TIMER ================= */
+  function formatTime(s){
+    const m = Math.floor(s/60).toString().padStart(2,'0');
+    const sec = (s%60).toString().padStart(2,'0');
+    return `${m}:${sec}`;
+  }
+  function renderTimer(){
+    timerDisplay.textContent = formatTime(timerRemaining);
+    timerDisplay.classList.toggle('warn', timerRemaining <= 60 && timerRemaining > 0);
+  }
+  function startTimer(){
+    if(timerRunning) return;
+    timerRunning = true;
+    timerStateLabel.textContent = 'Yozilmoqda...';
+    startBtn.disabled = true; pauseBtn.disabled = false; timerSelect.disabled = true;
+    timerInterval = setInterval(()=>{
+      timerRemaining--;
+      renderTimer();
+      if(timerRemaining <= 0){
+        clearInterval(timerInterval);
+        timerRunning = false;
+        timerStateLabel.textContent = 'Vaqt tugadi';
+        pauseBtn.disabled = true; startBtn.disabled = true;
+        showFinishStamp('ZEIT UM');
+      }
+    },1000);
+  }
+  function pauseTimer(){
+    if(!timerRunning) return;
+    clearInterval(timerInterval);
+    timerRunning = false;
+    timerStateLabel.textContent = 'Pauza qilindi';
+    startBtn.disabled = false; pauseBtn.disabled = true; startBtn.textContent = 'Davom etish';
+  }
+  function resetTimer(){
+    clearInterval(timerInterval);
+    timerRunning = false;
+    timerRemaining = timerSeconds;
+    renderTimer();
+    timerStateLabel.textContent = 'Bereit';
+    startBtn.disabled = false; pauseBtn.disabled = true; timerSelect.disabled = false;
+    startBtn.textContent = 'Boshlash';
+  }
+  timerSelect.addEventListener('change', ()=>{
+    timerSeconds = parseInt(timerSelect.value,10);
+    resetTimer();
+  });
+  startBtn.addEventListener('click', startTimer);
+  pauseBtn.addEventListener('click', pauseTimer);
+  resetBtn.addEventListener('click', resetTimer);
+
+  /* ================= COUNTER ================= */
+  function updateCounts(){
+    const text = writingArea.value;
+    const words = text.trim().length ? text.trim().split(/\s+/).filter(Boolean) : [];
+    const sentences = text.split(/[.!?]+/).map(s=>s.trim()).filter(Boolean);
+    const paras = text.split(/\n+/).map(p=>p.trim()).filter(Boolean);
+
+    wordCountEl.textContent = words.length;
+    sentenceCountEl.textContent = sentences.length;
+    charCountEl.textContent = text.length;
+    paraCountEl.textContent = paras.length;
+
+    const target = TASKS[currentCategory].target;
+    const pct = Math.min(100, Math.round((words.length/target)*100));
+    progressFill.style.width = pct + '%';
+    const reached = words.length >= target;
+    progressFill.classList.toggle('ok', reached);
+    wordCountEl.classList.toggle('ok', reached);
+  }
+  writingArea.addEventListener('input', updateCounts);
+
+  /* ================= FINISH / DOWNLOAD / CLEAR ================= */
+  function showFinishStamp(labelTop){
+    const words = writingArea.value.trim().length ? writingArea.value.trim().split(/\s+/).filter(Boolean).length : 0;
+    finishStamp.querySelector('span:first-child').textContent = labelTop || 'FERTIG';
+    finishSub.textContent = `${words} Wörter · ${document.getElementById('sentenceCount').textContent} Sätze`;
+    finishStamp.classList.add('show');
+    setTimeout(()=> finishStamp.classList.remove('show'), 1800);
+  }
+  finishBtn.addEventListener('click', ()=>{
+    pauseTimer();
+    showFinishStamp('FERTIG');
+  });
+  downloadBtn.addEventListener('click', ()=>{
+    const cat = TASKS[currentCategory].label;
+    const header = `SCHREIBEN TRAINER — B1\n${cat}\nThema: ${currentTask.title}\nDatum: ${new Date().toLocaleString('de-DE')}\n\n---\n\n`;
+    const blob = new Blob([header + writingArea.value], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `schreiben_${currentCategory}_${Date.now()}.txt`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+  clearBtn.addEventListener('click', ()=>{
+    if(confirm('Matnni tozalashni tasdiqlaysizmi?')){
+      writingArea.value = '';
+      updateCounts();
+    }
+  });
+
+  /* ================= AI CHECK ================= */
+  const checkBtn = document.getElementById('checkBtn');
+  const feedbackPanel = document.getElementById('feedbackPanel');
+
+  function scoreClass(score){
+    if(score >= 75) return '';
+    if(score >= 50) return 'mid';
+    return 'low';
+  }
+
+  function renderFeedback(data){
+    const cls = scoreClass(data.score);
+    const leitpunkteHtml = (data.leitpunkte||[]).map(lp=>
+      `<li class="${lp.covered ? 'yes':'no'}">${lp.point}</li>`
+    ).join('');
+    const issuesHtml = (data.issues||[]).length ? (data.issues||[]).map(is=>
+      `<li><span class="fb-wrong">${is.wrong}</span> → <span class="fb-right">${is.right}</span>${is.note ? `<br><span style="color:var(--ink-faint); font-size:12.5px;">${is.note}</span>` : ''}</li>`
+    ).join('') : '<li style="color:var(--ink-faint);">Jiddiy xatolar topilmadi.</li>';
+
+    feedbackPanel.innerHTML = `
+      <div class="fb-header">
+        <div class="fb-title">Baholash natijasi</div>
+        <div class="fb-score">
+          <div class="fb-score-num ${cls}">${data.score}</div>
+          <div class="fb-score-label">B1 mezoni<br>bo'yicha ball</div>
+        </div>
+      </div>
+      <div class="fb-section">
+        <div class="fb-section-title">Umumiy fikr</div>
+        <p>${data.summary || ''}</p>
+      </div>
+      <div class="fb-section">
+        <div class="fb-section-title">Leitpunkte (bandlar) yoritilganmi</div>
+        <ul class="fb-checklist">${leitpunkteHtml}</ul>
+      </div>
+      <div class="fb-section">
+        <div class="fb-section-title">Grammatik va so'z tanlovi</div>
+        <ul class="fb-issues">${issuesHtml}</ul>
+      </div>
+      <div class="fb-section">
+        <div class="fb-section-title">Keyingi qadam uchun tavsiya</div>
+        <p>${data.suggestion || ''}</p>
+      </div>
+    `;
+  }
+
+  async function checkWithAI(){
+    const text = writingArea.value.trim();
+    if(!text){
+      feedbackPanel.style.display = 'block';
+      feedbackPanel.innerHTML = `<div class="fb-error">Avval biror narsa yozing.</div>`;
+      return;
+    }
+    feedbackPanel.style.display = 'block';
+    feedbackPanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Matn tekshirilmoqda...</div>`;
+    checkBtn.disabled = true;
+
+    const cat = TASKS[currentCategory];
+    const pointsList = currentTask.points.map((p,i)=>`${i+1}. ${p}`).join('\n');
+
+    const systemPrompt = `Du bist ein erfahrener Prüfer für die deutsche B1-Schreibprüfung. Du bewertest den Text eines Deutschlerners (Muttersprache Usbekisch) nach B1-Kriterien: Erfüllung der Leitpunkte, Textaufbau, Wortschatz, Grammatik.
+Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt, ohne Markdown-Codeblock, ohne einleitenden Text, exakt in diesem Format:
+{
+  "score": <Zahl 0-100>,
+  "summary": "<2-3 Sätze allgemeines Feedback, auf Usbekisch geschrieben>",
+  "leitpunkte": [{"point": "<Leitpunkt auf Deutsch>", "covered": <true/false>}],
+  "issues": [{"wrong": "<falsches Beispiel aus dem Text>", "right": "<korrigierte Version>", "note": "<kurze Erklärung auf Usbekisch>"}],
+  "suggestion": "<1-2 Sätze konkreter Tipp für die nächste Übung, auf Usbekisch>"
+}
+Gib maximal 6 issues an, die wichtigsten zuerst. Wenn der Text die Leitpunkte aus der Aufgabe nicht abdeckt, setze covered auf false. Sei ehrlich aber konstruktiv.`;
+
+    const userPrompt = `Aufgabe (${cat.label}): ${currentTask.title}
+Kontext: ${currentTask.context}
+Leitpunkte:
+${pointsList}
+
+Text des Lerners:
+"""
+${text}
+"""`;
+
+    try{
+      const response = await fetch("/.netlify/functions/check-writing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemPrompt: systemPrompt,
+          userPrompt: userPrompt
+        })
+      });
+      const parsed = await response.json();
+      if(parsed.error){ throw new Error(parsed.error); }
+      renderFeedback(parsed);
+    }catch(err){
+      feedbackPanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
+      console.error("AI check error:", err);
+    }finally{
+      checkBtn.disabled = false;
+    }
+  }
+
+  checkBtn.addEventListener('click', checkWithAI);
+
+  /* ================= INIT ================= */
+  renderTabs();
+  pickTask(true);
+  updateCounts();
+  renderTimer();
+
+})();
+</script>
+</body>
+</html>
