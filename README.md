@@ -29,15 +29,15 @@ git push -u origin main
 
 ## AI tekshirish funksiyasini ishga tushirish (majburiy qadam)
 
-AI orqali baholash ishlashi uchun Anthropic API kaliti kerak:
+AI orqali baholash ishlashi uchun Groq API kaliti kerak (bepul tier mavjud):
 
-1. [console.anthropic.com](https://console.anthropic.com) da API kalit oling
+1. [console.groq.com/keys](https://console.groq.com/keys) da ro'yxatdan o'ting va API kalit oling
 2. Netlify saytingizda: **Site settings → Environment variables → Add a variable**
-   - Key: `ANTHROPIC_API_KEY`
+   - Key: `GROQ_API_KEY`
    - Value: (o'z API kalitingiz)
 3. **Site settings → Build & deploy → Trigger deploy → Deploy site** orqali qayta deploy qiling (env variable qo'shilgandan keyin qayta deploy shart)
 
-Shundan so'ng "AI bilan tekshirish" tugmasi to'liq ishlaydi.
+Shundan so'ng "AI bilan tekshirish" tugmasi to'liq ishlaydi. Model sifatida `llama-3.3-70b-versatile` ishlatiladi — tez va bepul, lekin nemis tili baholashda ba'zan Claude kabi aniq bo'lmasligi mumkin. Kerak bo'lsa `netlify/functions/check-writing.js` ichidagi `model` qiymatini boshqa Groq modeliga almashtirish mumkin.
 
 ## Eslatma
 
