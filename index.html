@@ -90,6 +90,54 @@
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
   @media (max-width:920px){ .grid{ grid-template-columns:1fr; } }
 
+  /* ===== Mobile responsiveness ===== */
+  @media (max-width:640px){
+    header{ padding:16px 18px 14px 18px; align-items:flex-start; }
+    .header-right{ display:none; }
+    .stamp-badge{ width:56px; height:56px; }
+    .stamp-badge span:first-child{ font-size:15px; }
+    .stamp-badge span:last-child{ font-size:7px; }
+    h1{ font-size:24px; }
+
+    main{ padding:18px 16px; }
+    .intro-note{ font-size:13px; }
+
+    .tabs{ gap:6px; margin-bottom:16px; }
+    .tab{ font-size:11.5px; padding:8px 12px; flex:1 1 auto; text-align:center; }
+
+    .card, .paper-wrap, .timer-row, .feedback-panel{ padding:16px 16px 14px 16px; }
+    .card::before, .feedback-panel::before{ left:16px; right:16px; }
+    .task-title{ font-size:18px; }
+    .task-context, .leitpunkte li{ font-size:13.5px; }
+    .task-footer{ gap:10px 16px; font-size:10.5px; }
+
+    .timer-row{ flex-direction:column; align-items:stretch; gap:14px; }
+    .timer-display{ font-size:32px; }
+    .timer-controls{ flex-wrap:wrap; gap:8px; }
+    .timer-controls .btn, .timer-select{ flex:1 1 auto; font-size:12.5px; padding:9px 10px; }
+
+    .paper-title{ font-size:14.5px; }
+    textarea{ min-height:220px; font-size:15px; line-height:30px; }
+
+    .stats-row{ flex-wrap:wrap; }
+    .stat{ min-width:45%; border-right:none; border-bottom:1px dashed var(--paper-line); padding:8px 4px; }
+    .stat-num{ font-size:20px; }
+
+    .actions-row{ flex-direction:column; }
+    .actions-row .btn{ width:100%; }
+
+    .fb-header{ flex-direction:column; align-items:flex-start; }
+    .fb-score-num{ width:48px; height:48px; font-size:15px; }
+
+    .finish-stamp{ width:160px; height:160px; }
+    .finish-stamp span:first-child{ font-size:22px; }
+  }
+
+  @media (max-width:380px){
+    .tabs{ flex-direction:column; }
+    .stat{ min-width:100%; }
+  }
+
   /* ===== Task card (Aufgabenblatt) ===== */
   .card{
     background:var(--card); border:1px solid var(--paper-line); border-radius:2px;
