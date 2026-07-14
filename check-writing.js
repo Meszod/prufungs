@@ -1,4 +1,4 @@
-// Netlify Function: securely proxies requests to the Anthropic API.
+// Netlify Function: securely proxies requests to the Groq API (OpenAI-compatible).
 // The API key lives only in Netlify's environment variables (server side),
 // never in the browser.
 
@@ -7,11 +7,11 @@ exports.handler = async function (event) {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "ANTHROPIC_API_KEY sozlanmagan. Netlify > Site settings > Environment variables bo'limiga qo'shing." })
+      body: JSON.stringify({ error: "GROQ_API_KEY sozlanmagan. Netlify > Site settings > Environment variables bo'limiga qo'shing." })
     };
   }
 
@@ -26,32 +26,32 @@ exports.handler = async function (event) {
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }]
+        temperature: 0.4,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      return { statusCode: response.status, body: JSON.stringify({ error: `Anthropic API xatosi: ${errText}` }) };
+      return { statusCode: response.status, body: JSON.stringify({ error: `Groq API xatosi: ${errText}` }) };
     }
 
     const data = await response.json();
-    const textBlocks = (data.content || [])
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-    const cleaned = textBlocks.replace(/```json|```/g, "").trim();
+    const textBlock = data.choices?.[0]?.message?.content || "";
+    const cleaned = textBlock.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 
     return {
