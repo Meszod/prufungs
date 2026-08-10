@@ -1220,7 +1220,7 @@ ${text}
   const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognizer = null;
   let isListening = false;
-  let interimText = '';
+  let manualStop = false;
 
   if(!SpeechRecognitionAPI){
     micBtn.classList.add('unsupported');
@@ -1232,9 +1232,15 @@ ${text}
     recognizer.interimResults = true;
 
     let baseText = '';
+    let finalizedCount = 0; // nechta natija allaqachon matnga qo'shilganini o'zimiz kuzatamiz
+    // (mobil brauzerlarda event.resultIndex ba'zan noto'g'ri ishlaydi va so'zlarni
+    // qayta-qayta finalizatsiya qilib, matnga bir necha marta qo'shib yuboradi —
+    // shu sababli o'zimizning hisoblagichimiz orqali dublikatlarning oldini olamiz)
 
     recognizer.onstart = ()=>{
       isListening = true;
+      manualStop = false;
+      finalizedCount = 0;
       baseText = writingArea.value;
       if(baseText && !/\s$/.test(baseText)) baseText += ' ';
       micBtn.classList.add('listening');
@@ -1243,29 +1249,42 @@ ${text}
     };
 
     recognizer.onresult = (event)=>{
-      let finalChunk = '';
+      let newFinalChunk = '';
       let interimChunk = '';
-      for(let i = event.resultIndex; i < event.results.length; i++){
-        const transcript = event.results[i][0].transcript;
-        if(event.results[i].isFinal){
-          finalChunk += transcript + ' ';
-        } else {
-          interimChunk += transcript;
+      for(let i = 0; i < event.results.length; i++){
+        const result = event.results[i];
+        if(result.isFinal){
+          if(i >= finalizedCount){
+            newFinalChunk += result[0].transcript + ' ';
+            finalizedCount = i + 1;
+          }
+        } else if(i >= finalizedCount){
+          interimChunk += result[0].transcript;
         }
       }
-      if(finalChunk){
-        baseText += finalChunk;
+      if(newFinalChunk){
+        baseText += newFinalChunk;
       }
       writingArea.value = baseText + interimChunk;
       updateCounts();
     };
 
     recognizer.onerror = (event)=>{
+      if(event.error === 'no-speech' || event.error === 'aborted') return; // jimjitlik — normal holat, e'tibor bermaymiz
       micStatus.innerHTML = `Xatolik: ${event.error === 'not-allowed' ? "mikrofonga ruxsat berilmadi" : event.error}`;
       setTimeout(()=>{ micStatus.style.display = 'none'; }, 3000);
     };
 
     recognizer.onend = ()=>{
+      // Ba'zi mobil brauzerlarda "continuous" rejimi barqaror ishlamaydi va
+      // tanlash biroz jimlikdan keyin o'zi to'xtaydi. Agar foydalanuvchi qo'lda
+      // to'xtatmagan bo'lsa, tinglashni avtomatik davom ettiramiz.
+      if(!manualStop){
+        try{
+          recognizer.start();
+          return;
+        }catch(e){ /* qayta ishga tushmadi, holatni yakunlaymiz */ }
+      }
       isListening = false;
       micBtn.classList.remove('listening');
       micStatus.style.display = 'none';
@@ -1274,6 +1293,7 @@ ${text}
 
     micBtn.addEventListener('click', ()=>{
       if(isListening){
+        manualStop = true;
         recognizer.stop();
       } else {
         try{ recognizer.start(); }
