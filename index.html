@@ -76,7 +76,9 @@
   .intro-note b{ color:var(--ink); }
 
   /* ===== Category tabs ===== */
-  .tabs{ display:flex; gap:8px; margin-bottom:22px; flex-wrap:wrap; }
+  .tabs-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:22px; flex-wrap:wrap; }
+  .tabs{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:0; }
+  .stats-btn{ font-size:12.5px; padding:9px 16px; white-space:nowrap; }
   .tab{
     font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.03em;
     padding:9px 16px; border:1.5px solid var(--ink); border-radius:999px;
@@ -85,6 +87,59 @@
   }
   .tab:hover{ background:rgba(28,37,65,0.05); }
   .tab.active{ background:var(--ink); color:var(--paper); }
+
+  /* ===== Stats / history panel ===== */
+  .stats-panel{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:22px 24px; margin-bottom:22px; position:relative;
+  }
+  .stats-panel::before{
+    content:""; position:absolute; top:0; left:24px; right:24px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--gold) 0 10px, transparent 10px 20px); opacity:0.5;
+  }
+  .stats-summary{ display:flex; gap:0; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid var(--paper-line); padding-bottom:16px; }
+  .stats-summary .stat{ flex:1; min-width:110px; text-align:center; border-right:1px dashed var(--paper-line); padding:0 8px; }
+  .stats-summary .stat:last-child{ border-right:none; }
+  .stats-empty{ color:var(--ink-faint); font-size:13.5px; text-align:center; padding:10px 0; }
+  .history-list{ list-style:none; margin:0; padding:0; max-height:280px; overflow-y:auto; }
+  .history-list li{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    font-size:13px; padding:9px 0; border-top:1px dashed var(--paper-line);
+  }
+  .history-list li:first-child{ border-top:none; }
+  .hist-info{ display:flex; flex-direction:column; gap:2px; }
+  .hist-topic{ color:var(--ink); font-weight:600; }
+  .hist-meta{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--ink-faint); }
+  .hist-score{
+    font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:14px;
+    width:38px; height:38px; border-radius:50%; border:2px solid var(--green); color:var(--green);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .hist-score.mid{ border-color:var(--gold); color:var(--gold); }
+  .hist-score.low{ border-color:var(--stamp-red); color:var(--stamp-red); }
+  .stats-clear-btn{ margin-top:14px; font-size:11.5px; padding:7px 12px; }
+
+  /* ===== Mic button (Speech-to-text) ===== */
+  .mic-btn{
+    width:30px; height:30px; border-radius:50%; border:1.5px solid var(--ink-soft);
+    background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all .15s ease; flex-shrink:0;
+  }
+  .mic-btn:hover{ background:rgba(28,37,65,0.05); }
+  .mic-btn.listening{
+    border-color:var(--stamp-red); color:var(--stamp-red); background:rgba(174,46,46,0.08);
+    animation:mic-pulse 1.4s ease-in-out infinite;
+  }
+  .mic-btn.unsupported{ opacity:0.35; cursor:not-allowed; }
+  @keyframes mic-pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(174,46,46,0.35); }
+    50%{ box-shadow:0 0 0 8px rgba(174,46,46,0); }
+  }
+  .mic-status{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--stamp-red);
+    display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  }
+  .mic-status .dot{ width:7px; height:7px; border-radius:50%; background:var(--stamp-red); animation:mic-pulse 1.2s ease-in-out infinite; }
 
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
@@ -102,8 +157,10 @@
     main{ padding:18px 16px; }
     .intro-note{ font-size:13px; }
 
-    .tabs{ gap:6px; margin-bottom:16px; }
+    .tabs-row{ margin-bottom:16px; }
+    .tabs{ gap:6px; margin-bottom:0; }
     .tab{ font-size:11.5px; padding:8px 12px; flex:1 1 auto; text-align:center; }
+    .stats-btn{ width:100%; }
 
     .card, .paper-wrap, .timer-row, .feedback-panel{ padding:16px 16px 14px 16px; }
     .card::before, .feedback-panel::before{ left:16px; right:16px; }
@@ -337,7 +394,12 @@
 <main>
   <p class="intro-note">Bu vosita nemis tili <b>B1 darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.</p>
 
-  <div class="tabs" id="tabs"></div>
+  <div class="tabs-row">
+    <div class="tabs" id="tabs"></div>
+    <button class="btn stats-btn" id="statsBtn">📊 Mening natijalarim</button>
+  </div>
+
+  <div class="stats-panel" id="statsPanel" style="display:none;"></div>
 
   <div class="grid">
     <!-- LEFT: Task card -->
@@ -368,9 +430,15 @@
       <div class="paper-wrap">
         <div class="paper-header">
           <div class="paper-title">Sizning matningiz</div>
-          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint);" id="targetHint"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint);" id="targetHint"></div>
+            <button class="mic-btn" id="micBtn" type="button" title="Ovoz bilan yozish (nemis tilida gapiring)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </button>
+          </div>
         </div>
-        <textarea id="writingArea" placeholder="Hier schreiben... (Yozishni shu yerda boshlang)"></textarea>
+        <div class="mic-status" id="micStatus" style="display:none;"></div>
+        <textarea id="writingArea" placeholder="Hier schreiben... (Yozishni shu yerda boshlang, yoki mikrofon tugmasini bosib nemischa gapiring)"></textarea>
 
         <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -467,6 +535,56 @@
             "Schlagen Sie vor, was er tun kann, um sich die Zeit zu vertreiben.",
             "Bieten Sie Ihre Hilfe an (z. B. Einkaufen)."
           ]
+        },
+        {
+          title: "Neuer Job",
+          context: "Sie haben eine neue Arbeitsstelle bekommen und schreiben Ihrer Freundin Sabine davon.",
+          points: [
+            "Berichten Sie, wo und als was Sie jetzt arbeiten.",
+            "Erzählen Sie, wie das Vorstellungsgespräch war.",
+            "Beschreiben Sie Ihre neuen Kollegen kurz.",
+            "Laden Sie Sabine ein, dies zu feiern."
+          ]
+        },
+        {
+          title: "Verlorenes Gepäck",
+          context: "Bei Ihrem letzten Flug ist Ihr Koffer verloren gegangen. Sie schreiben Ihrem Freund Kevin davon.",
+          points: [
+            "Erzählen Sie, was passiert ist.",
+            "Beschreiben Sie, wie Sie sich dabei gefühlt haben.",
+            "Berichten Sie, was die Fluggesellschaft unternommen hat.",
+            "Bitten Sie Kevin um einen Rat."
+          ]
+        },
+        {
+          title: "Hochzeit eines Verwandten",
+          context: "Ihr Cousin heiratet in zwei Monaten und Sie sind eingeladen. Schreiben Sie ihm zurück.",
+          points: [
+            "Bedanken Sie sich für die Einladung.",
+            "Bestätigen Sie Ihre Teilnahme.",
+            "Fragen Sie, ob Sie etwas mitbringen sollen.",
+            "Wünschen Sie ihm alles Gute."
+          ]
+        },
+        {
+          title: "Sprachkurs im Ausland",
+          context: "Sie haben gerade einen Deutschkurs im Ausland begonnen und schreiben Ihrer Familie davon.",
+          points: [
+            "Beschreiben Sie Ihre erste Woche im Kurs.",
+            "Erzählen Sie von Ihren Mitschülern.",
+            "Berichten Sie, was Ihnen schwerfällt.",
+            "Erzählen Sie, was Sie in der Freizeit machen."
+          ]
+        },
+        {
+          title: "Vergessener Geburtstag",
+          context: "Sie haben den Geburtstag Ihres besten Freundes Daniel vergessen. Schreiben Sie ihm eine E-Mail.",
+          points: [
+            "Entschuldigen Sie sich dafür, dass Sie den Geburtstag vergessen haben.",
+            "Erklären Sie kurz, warum es passiert ist.",
+            "Gratulieren Sie ihm nachträglich.",
+            "Schlagen Sie vor, sich bald zu treffen."
+          ]
         }
       ]
     },
@@ -534,6 +652,56 @@
             "Nennen Sie mögliche Probleme.",
             "Geben Sie Ihre persönliche Meinung ab."
           ]
+        },
+        {
+          title: "Online-Shopping vs. Einkaufen im Laden",
+          context: "Im Forum 'Konsum heute' wird diskutiert, ob Online-Shopping das Einkaufen im Geschäft ersetzen sollte.",
+          points: [
+            "Beschreiben Sie, wie Sie meistens einkaufen.",
+            "Nennen Sie Vorteile des Online-Shoppings.",
+            "Nennen Sie Vorteile des Einkaufens im Laden.",
+            "Sagen Sie, was Sie in Zukunft bevorzugen werden."
+          ]
+        },
+        {
+          title: "Sollten Kinder ein eigenes Smartphone haben?",
+          context: "Im Elternforum wird diskutiert, ab welchem Alter Kinder ein eigenes Smartphone bekommen sollten.",
+          points: [
+            "Beschreiben Sie kurz die Situation in Ihrem Umfeld.",
+            "Nennen Sie Vorteile eines frühen Smartphone-Besitzes.",
+            "Nennen Sie mögliche Risiken.",
+            "Geben Sie Ihre persönliche Meinung ab."
+          ]
+        },
+        {
+          title: "Vier-Tage-Woche",
+          context: "In einem Wirtschaftsforum wird diskutiert, ob eine Vier-Tage-Arbeitswoche sinnvoll wäre.",
+          points: [
+            "Beschreiben Sie die aktuelle Arbeitswoche in Ihrem Land.",
+            "Nennen Sie Vorteile einer Vier-Tage-Woche.",
+            "Nennen Sie mögliche Nachteile.",
+            "Sagen Sie, ob Sie dafür oder dagegen sind."
+          ]
+        },
+        {
+          title: "Reisen mit dem Flugzeug und Umweltschutz",
+          context: "Im Forum 'Nachhaltig leben' wird diskutiert, ob man aus Umweltgründen weniger fliegen sollte.",
+          points: [
+            "Beschreiben Sie, wie oft Sie reisen und womit.",
+            "Nennen Sie die Auswirkungen des Fliegens auf die Umwelt.",
+            "Nennen Sie Alternativen zum Fliegen.",
+            "Geben Sie Ihre persönliche Meinung dazu ab."
+          ]
+        },
+        {
+          title: "Ist Geld wichtiger als Freizeit?",
+          context: "Im Forum 'Lebensphilosophie' wird gefragt, ob ein hohes Gehalt wichtiger ist als viel Freizeit.",
+          points: [
+            "Beschreiben Sie, was Ihnen bei der Arbeit wichtig ist.",
+            "Nennen Sie Argumente für ein hohes Gehalt.",
+            "Nennen Sie Argumente für viel Freizeit.",
+            "Sagen Sie, was für Sie persönlich wichtiger ist."
+          ]
         }
       ]
     },
@@ -586,6 +754,51 @@
             "Nennen Sie den Grund (Umzug).",
             "Fragen Sie nach den nächsten Schritten."
           ]
+        },
+        {
+          title: "Anfrage wegen falscher Rechnung",
+          context: "Sie haben eine Internetrechnung erhalten, die Ihrer Meinung nach zu hoch ist. Schreiben Sie an den Anbieter.",
+          points: [
+            "Beschreiben Sie das Problem mit der Rechnung.",
+            "Bitten Sie um eine Erklärung.",
+            "Fordern Sie eine Korrektur."
+          ]
+        },
+        {
+          title: "Anmeldung zu einem Kurs verschieben",
+          context: "Sie sind für einen Deutschkurs angemeldet, können aber wegen Krankheit nicht zum Starttermin kommen.",
+          points: [
+            "Informieren Sie die Schule über Ihre Situation.",
+            "Bitten Sie um Verschiebung des Kursbeginns.",
+            "Fragen Sie nach möglichen alternativen Terminen."
+          ]
+        },
+        {
+          title: "Beschwerde über verspätete Lieferung",
+          context: "Ihre Online-Bestellung ist schon zwei Wochen überfällig. Schreiben Sie eine formelle E-Mail an den Verkäufer.",
+          points: [
+            "Beschreiben Sie die Bestellung und das Problem.",
+            "Fragen Sie nach dem aktuellen Lieferstatus.",
+            "Setzen Sie eine Frist für die Lieferung."
+          ]
+        },
+        {
+          title: "Bewerbung um ein Praktikum",
+          context: "Sie interessieren sich für ein Praktikum in einer Firma und schreiben eine erste Anfrage.",
+          points: [
+            "Stellen Sie sich kurz vor.",
+            "Erklären Sie, warum Sie sich für die Firma interessieren.",
+            "Fragen Sie nach freien Praktikumsplätzen."
+          ]
+        },
+        {
+          title: "Änderung eines Hotelzimmers",
+          context: "Sie haben ein Hotelzimmer gebucht, möchten aber den Zeitraum ändern. Schreiben Sie an die Rezeption.",
+          points: [
+            "Nennen Sie Ihre Buchungsdetails (frei erfunden).",
+            "Erklären Sie, welche Änderung Sie wünschen.",
+            "Fragen Sie, ob zusätzliche Kosten entstehen."
+          ]
         }
       ]
     }
@@ -598,6 +811,9 @@
   let timerRemaining = 900;
   let timerInterval = null;
   let timerRunning = false;
+
+  const DRAFT_KEY = 'schreibenTrainer_draft_v1';
+  const HISTORY_KEY = 'schreibenTrainer_history_v1';
 
   const tabsEl = document.getElementById('tabs');
   const taskCard = document.getElementById('taskCard');
@@ -619,6 +835,10 @@
   const clearBtn = document.getElementById('clearBtn');
   const finishStamp = document.getElementById('finishStamp');
   const finishSub = document.getElementById('finishSub');
+  const statsBtn = document.getElementById('statsBtn');
+  const statsPanel = document.getElementById('statsPanel');
+  const micBtn = document.getElementById('micBtn');
+  const micStatus = document.getElementById('micStatus');
 
   /* ================= TABS ================= */
   function renderTabs(){
@@ -633,11 +853,15 @@
   }
 
   /* ================= TASK ================= */
-  function pickTask(resetTimerToDefault){
+  function pickTask(resetTimerToDefault, forcedTitle){
     const pool = TASKS[currentCategory].items;
     let next;
-    do { next = pool[Math.floor(Math.random()*pool.length)]; }
-    while (pool.length > 1 && currentTask && next.title === currentTask.title);
+    if(forcedTitle){
+      next = pool.find(t=>t.title === forcedTitle) || pool[0];
+    } else {
+      do { next = pool[Math.floor(Math.random()*pool.length)]; }
+      while (pool.length > 1 && currentTask && next.title === currentTask.title);
+    }
     currentTask = next;
     renderTaskCard();
     if(resetTimerToDefault){
@@ -646,6 +870,7 @@
       resetTimer();
     }
     updateTargetHint();
+    saveDraft();
   }
 
   function renderTaskCard(){
@@ -673,6 +898,31 @@
     targetHint.textContent = `Ziel: ~${TASKS[currentCategory].target} Wörter`;
   }
 
+  /* ================= DRAFT AUTOSAVE (localStorage) ================= */
+  function saveDraft(){
+    try{
+      const draft = {
+        category: currentCategory,
+        taskTitle: currentTask ? currentTask.title : null,
+        text: writingArea.value,
+        timerSeconds: timerSeconds,
+        timerRemaining: timerRemaining,
+        savedAt: Date.now()
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }catch(e){ /* localStorage mavjud bo'lmasa jim o'tkazib yuboramiz */ }
+  }
+  function loadDraft(){
+    try{
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if(!raw) return null;
+      return JSON.parse(raw);
+    }catch(e){ return null; }
+  }
+  function clearDraft(){
+    try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  }
+
   /* ================= TIMER ================= */
   function formatTime(s){
     const m = Math.floor(s/60).toString().padStart(2,'0');
@@ -691,12 +941,14 @@
     timerInterval = setInterval(()=>{
       timerRemaining--;
       renderTimer();
+      if(timerRemaining % 5 === 0) saveDraft();
       if(timerRemaining <= 0){
         clearInterval(timerInterval);
         timerRunning = false;
         timerStateLabel.textContent = 'Vaqt tugadi';
         pauseBtn.disabled = true; startBtn.disabled = true;
         showFinishStamp('ZEIT UM');
+        saveDraft();
       }
     },1000);
   }
@@ -719,10 +971,11 @@
   timerSelect.addEventListener('change', ()=>{
     timerSeconds = parseInt(timerSelect.value,10);
     resetTimer();
+    saveDraft();
   });
   startBtn.addEventListener('click', startTimer);
   pauseBtn.addEventListener('click', pauseTimer);
-  resetBtn.addEventListener('click', resetTimer);
+  resetBtn.addEventListener('click', ()=>{ resetTimer(); saveDraft(); });
 
   /* ================= COUNTER ================= */
   function updateCounts(){
@@ -743,7 +996,12 @@
     progressFill.classList.toggle('ok', reached);
     wordCountEl.classList.toggle('ok', reached);
   }
-  writingArea.addEventListener('input', updateCounts);
+  let draftSaveTimeout = null;
+  writingArea.addEventListener('input', ()=>{
+    updateCounts();
+    clearTimeout(draftSaveTimeout);
+    draftSaveTimeout = setTimeout(saveDraft, 500);
+  });
 
   /* ================= FINISH / DOWNLOAD / CLEAR ================= */
   function showFinishStamp(labelTop){
@@ -772,7 +1030,77 @@
     if(confirm('Matnni tozalashni tasdiqlaysizmi?')){
       writingArea.value = '';
       updateCounts();
+      saveDraft();
     }
+  });
+
+  /* ================= HISTORY / STATS ================= */
+  function loadHistory(){
+    try{
+      const raw = localStorage.getItem(HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+  function addHistoryEntry(entry){
+    try{
+      const hist = loadHistory();
+      hist.unshift(entry);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.slice(0, 200)));
+    }catch(e){ /* ignore */ }
+  }
+  function histScoreClass(score){
+    if(score >= 75) return '';
+    if(score >= 50) return 'mid';
+    return 'low';
+  }
+  function renderStatsPanel(){
+    const hist = loadHistory();
+    if(!hist.length){
+      statsPanel.innerHTML = `
+        <div class="stats-empty">Hali hech qanday mashq bajarilmagan. "AI bilan tekshirish" tugmasini bosganingizdan so'ng natijalar shu yerda saqlanadi.</div>
+      `;
+      return;
+    }
+    const avg = Math.round(hist.reduce((s,h)=>s+h.score,0) / hist.length);
+    const best = Math.max(...hist.map(h=>h.score));
+    const last5 = hist.slice(0,5);
+    const last5Avg = Math.round(last5.reduce((s,h)=>s+h.score,0) / last5.length);
+    const itemsHtml = hist.slice(0,25).map(h=>{
+      const d = new Date(h.date);
+      const dateStr = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+      return `
+        <li>
+          <div class="hist-info">
+            <span class="hist-topic">${h.topic}</span>
+            <span class="hist-meta">${h.categoryLabel} · ${dateStr}</span>
+          </div>
+          <div class="hist-score ${histScoreClass(h.score)}">${h.score}</div>
+        </li>`;
+    }).join('');
+    statsPanel.innerHTML = `
+      <div class="stats-summary">
+        <div class="stat"><div class="stat-num">${hist.length}</div><div class="stat-label">Jami mashqlar</div></div>
+        <div class="stat"><div class="stat-num">${avg}</div><div class="stat-label">O'rtacha ball</div></div>
+        <div class="stat"><div class="stat-num">${best}</div><div class="stat-label">Eng yuqori ball</div></div>
+        <div class="stat"><div class="stat-num">${last5Avg}</div><div class="stat-label">Oxirgi 5 ta o'rtacha</div></div>
+      </div>
+      <ul class="history-list">${itemsHtml}</ul>
+      <button class="btn danger stats-clear-btn" id="statsClearBtn">Tarixni tozalash</button>
+    `;
+    const clearHistBtn = document.getElementById('statsClearBtn');
+    if(clearHistBtn){
+      clearHistBtn.onclick = ()=>{
+        if(confirm("Butun tarixni o'chirishni tasdiqlaysizmi?")){
+          try{ localStorage.removeItem(HISTORY_KEY); }catch(e){}
+          renderStatsPanel();
+        }
+      };
+    }
+  }
+  statsBtn.addEventListener('click', ()=>{
+    const isHidden = statsPanel.style.display === 'none';
+    statsPanel.style.display = isHidden ? 'block' : 'none';
+    if(isHidden) renderStatsPanel();
   });
 
   /* ================= AI CHECK ================= */
@@ -868,6 +1196,16 @@ ${text}
       const parsed = await response.json();
       if(parsed.error){ throw new Error(parsed.error); }
       renderFeedback(parsed);
+      if(typeof parsed.score === 'number'){
+        addHistoryEntry({
+          date: Date.now(),
+          category: currentCategory,
+          categoryLabel: cat.label,
+          topic: currentTask.title,
+          score: parsed.score
+        });
+        if(statsPanel.style.display !== 'none') renderStatsPanel();
+      }
     }catch(err){
       feedbackPanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
       console.error("AI check error:", err);
@@ -878,9 +1216,94 @@ ${text}
 
   checkBtn.addEventListener('click', checkWithAI);
 
+  /* ================= OVOZ BILAN YOZISH (Speech-to-Text) ================= */
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let isListening = false;
+  let interimText = '';
+
+  if(!SpeechRecognitionAPI){
+    micBtn.classList.add('unsupported');
+    micBtn.title = "Bu brauzerda ovozdan matnga o'girish qo'llab-quvvatlanmaydi (Chrome yoki Edge'dan foydalaning)";
+  } else {
+    recognizer = new SpeechRecognitionAPI();
+    recognizer.lang = 'de-DE';
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+
+    let baseText = '';
+
+    recognizer.onstart = ()=>{
+      isListening = true;
+      baseText = writingArea.value;
+      if(baseText && !/\s$/.test(baseText)) baseText += ' ';
+      micBtn.classList.add('listening');
+      micStatus.style.display = 'flex';
+      micStatus.innerHTML = `<span class="dot"></span> Tinglanmoqda... nemis tilida gapiring`;
+    };
+
+    recognizer.onresult = (event)=>{
+      let finalChunk = '';
+      let interimChunk = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const transcript = event.results[i][0].transcript;
+        if(event.results[i].isFinal){
+          finalChunk += transcript + ' ';
+        } else {
+          interimChunk += transcript;
+        }
+      }
+      if(finalChunk){
+        baseText += finalChunk;
+      }
+      writingArea.value = baseText + interimChunk;
+      updateCounts();
+    };
+
+    recognizer.onerror = (event)=>{
+      micStatus.innerHTML = `Xatolik: ${event.error === 'not-allowed' ? "mikrofonga ruxsat berilmadi" : event.error}`;
+      setTimeout(()=>{ micStatus.style.display = 'none'; }, 3000);
+    };
+
+    recognizer.onend = ()=>{
+      isListening = false;
+      micBtn.classList.remove('listening');
+      micStatus.style.display = 'none';
+      saveDraft();
+    };
+
+    micBtn.addEventListener('click', ()=>{
+      if(isListening){
+        recognizer.stop();
+      } else {
+        try{ recognizer.start(); }
+        catch(e){ /* allaqachon ishlayotgan bo'lishi mumkin */ }
+      }
+    });
+  }
+
   /* ================= INIT ================= */
   renderTabs();
-  pickTask(true);
+
+  (function initFromDraft(){
+    const draft = loadDraft();
+    if(draft && draft.category && TASKS[draft.category]){
+      currentCategory = draft.category;
+      renderTabs();
+      pickTask(false, draft.taskTitle);
+      if(draft.text) writingArea.value = draft.text;
+      if(draft.timerSeconds){
+        timerSeconds = draft.timerSeconds;
+        timerSelect.value = String(timerSeconds);
+      }
+      timerRemaining = (typeof draft.timerRemaining === 'number') ? draft.timerRemaining : timerSeconds;
+      renderTimer();
+      timerStateLabel.textContent = 'Bereit';
+    } else {
+      pickTask(true);
+    }
+  })();
+
   updateCounts();
   renderTimer();
 
