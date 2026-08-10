@@ -141,8 +141,67 @@
   }
   .mic-status .dot{ width:7px; height:7px; border-radius:50%; background:var(--stamp-red); animation:mic-pulse 1.2s ease-in-out infinite; }
 
+  /* ===== Vocabulary panel ===== */
+  .vocab-toggle-btn{ font-size:11px; padding:6px 12px; margin-left:auto; }
+  .vocab-panel{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:18px 20px; margin-top:14px; position:relative; display:none;
+  }
+  .vocab-panel::before{
+    content:""; position:absolute; top:0; left:20px; right:20px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--gold) 0 10px, transparent 10px 20px); opacity:0.5;
+  }
+  .vocab-panel-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .vocab-panel-title{ font-family:'Fraunces', serif; font-weight:600; font-size:15px; }
+  .vocab-close-btn{
+    width:24px; height:24px; border-radius:50%; border:1.5px solid var(--ink-faint); background:transparent;
+    color:var(--ink-faint); cursor:pointer; font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .vocab-close-btn:hover{ border-color:var(--ink); color:var(--ink); }
+  .vocab-group{ margin-bottom:12px; }
+  .vocab-group:last-child{ margin-bottom:0; }
+  .vocab-group-title{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.07em; text-transform:uppercase; color:var(--gold); font-weight:600; margin-bottom:6px; }
+  .vocab-item{ font-size:13.5px; line-height:1.5; padding:5px 0; color:var(--ink); }
+  .vocab-item i{ color:var(--ink-soft); font-style:normal; font-size:12px; }
+
+  /* ===== Konnektoren yordamchisi ===== */
+  .konnekt-btn{
+    width:30px; height:30px; border-radius:50%; border:1.5px solid var(--ink-soft);
+    background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all .15s ease; flex-shrink:0; font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:13px;
+  }
+  .konnekt-btn:hover{ background:rgba(28,37,65,0.05); }
+  .konnekt-btn.active{ border-color:var(--gold); color:var(--gold); background:rgba(156,123,46,0.08); }
+  .konnekt-dropdown{
+    display:none; background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:14px 16px; margin-bottom:10px;
+  }
+  .konnekt-group{ margin-bottom:10px; }
+  .konnekt-group:last-child{ margin-bottom:0; }
+  .konnekt-group-title{ font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.07em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:6px; }
+  .konnekt-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .konnekt-chip{
+    font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; padding:5px 11px; border-radius:999px;
+    border:1.5px solid var(--paper-line); background:var(--paper); color:var(--ink); cursor:pointer; transition:all .15s ease;
+  }
+  .konnekt-chip:hover{ border-color:var(--gold); color:var(--gold); background:rgba(156,123,46,0.06); }
+
+  /* ===== Musterlösung (namuna javob) paneli ===== */
+  .sample-panel{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px; box-shadow:var(--shadow);
+    padding:20px 22px; margin-top:16px; position:relative; display:none;
+  }
+  .sample-panel::before{
+    content:""; position:absolute; top:0; left:22px; right:22px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--ink-soft) 0 10px, transparent 10px 20px); opacity:0.4;
+  }
+  .sample-panel-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .sample-panel-title{ font-family:'Fraunces', serif; font-weight:600; font-size:15px; }
+  .sample-text{ font-size:14px; line-height:1.7; color:var(--ink); white-space:pre-wrap; }
+
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
+  .task-col{ display:flex; flex-direction:column; }
   @media (max-width:920px){ .grid{ grid-template-columns:1fr; } }
 
   /* ===== Mobile responsiveness ===== */
@@ -403,8 +462,11 @@
 
   <div class="grid">
     <!-- LEFT: Task card -->
-    <div class="card" id="taskCard">
-      <!-- filled by JS -->
+    <div class="task-col">
+      <div class="card" id="taskCard">
+        <!-- filled by JS -->
+      </div>
+      <div class="vocab-panel" id="vocabPanel"></div>
     </div>
 
     <!-- RIGHT: Timer + writing -->
@@ -432,11 +494,13 @@
           <div class="paper-title">Sizning matningiz</div>
           <div style="display:flex; align-items:center; gap:10px;">
             <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint);" id="targetHint"></div>
+            <button class="konnekt-btn" id="konnektBtn" type="button" title="Bog'lovchi so'zlar (Konnektoren)">K</button>
             <button class="mic-btn" id="micBtn" type="button" title="Ovoz bilan yozish (nemis tilida gapiring)">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             </button>
           </div>
         </div>
+        <div class="konnekt-dropdown" id="konnektDropdown"></div>
         <div class="mic-status" id="micStatus" style="display:none;"></div>
         <textarea id="writingArea" placeholder="Hier schreiben... (Yozishni shu yerda boshlang, yoki mikrofon tugmasini bosib nemischa gapiring)"></textarea>
 
@@ -452,11 +516,13 @@
         <div class="actions-row">
           <button class="btn primary" id="finishBtn">Yakunlash</button>
           <button class="btn" id="checkBtn">AI bilan tekshirish</button>
+          <button class="btn" id="sampleBtn">Namuna javob</button>
           <button class="btn" id="downloadBtn">Matnni yuklab olish (.txt)</button>
           <button class="btn" id="clearBtn">Tozalash</button>
         </div>
       </div>
 
+      <div class="sample-panel" id="samplePanel"></div>
       <div class="feedback-panel" id="feedbackPanel" style="display:none;"></div>
     </div>
   </div>
@@ -804,6 +870,74 @@
     }
   };
 
+  /* ================= SO'Z BOYLIGI (VOCAB) ================= */
+  const VOCAB = {
+    teil1: [
+      { group: "Xat boshlash", items: [
+        { de: "Liebe/Lieber ___,", uz: "Hurmatli/Aziz ___ (do'stona xat)" },
+        { de: "vielen Dank für deine Nachricht.", uz: "xabaring uchun katta rahmat" },
+        { de: "es freut mich, von dir zu hören.", uz: "sendan xabar olganimdan xursandman" }
+      ]},
+      { group: "Fikr bildirish / reaksiya", items: [
+        { de: "Das tut mir sehr leid.", uz: "Bu meni juda xafa qildi / afsuslanaman" },
+        { de: "Ich finde es toll, dass...", uz: "...ligidan juda xursandman" },
+        { de: "Ich kann dir gut verstehen.", uz: "Seni yaxshi tushunaman" }
+      ]},
+      { group: "Xatni yakunlash", items: [
+        { de: "Melde dich bald bei mir!", uz: "Menga tezroq xabar ber!" },
+        { de: "Ich freue mich schon auf dein Antwort.", uz: "Javobingni intiqlik bilan kutaman" },
+        { de: "Liebe Grüße / Bis bald,", uz: "Iliq salomlar bilan / Ko'rishguncha" }
+      ]}
+    ],
+    teil2: [
+      { group: "Kirish", items: [
+        { de: "In letzter Zeit wird viel über ... diskutiert.", uz: "So'nggi paytda ... haqida ko'p muhokama qilinmoqda" },
+        { de: "Ich möchte hier meine Meinung dazu äußern.", uz: "Shu haqda o'z fikrimni bildirmoqchiman" }
+      ]},
+      { group: "Fikr bildirish", items: [
+        { de: "Meiner Meinung nach...", uz: "Menimcha..." },
+        { de: "Ich bin der Meinung, dass...", uz: "Men shunday fikrdamanki..." },
+        { de: "Aus meiner Sicht...", uz: "Mening nuqtai nazarimdan..." }
+      ]},
+      { group: "Qarama-qarshi fikr", items: [
+        { de: "Einerseits..., andererseits...", uz: "Bir tomondan..., boshqa tomondan..." },
+        { de: "Manche Leute meinen, dass..., aber ich denke...", uz: "Ba'zilar shunday deb o'ylaydi..., lekin men..." }
+      ]},
+      { group: "Xulosa", items: [
+        { de: "Zusammenfassend lässt sich sagen, dass...", uz: "Xulosa qilib aytganda..." },
+        { de: "Abschließend möchte ich betonen, dass...", uz: "Yakunda shuni ta'kidlamoqchimanki..." }
+      ]}
+    ],
+    teil3: [
+      { group: "Rasmiy murojaat", items: [
+        { de: "Sehr geehrte Damen und Herren,", uz: "Hurmatli xonimlar va janoblar," },
+        { de: "Sehr geehrte/r Frau/Herr ___,", uz: "Hurmatli ___ xonim/janob," }
+      ]},
+      { group: "Maqsadni bildirish", items: [
+        { de: "Ich schreibe Ihnen, weil...", uz: "Sizga yozayotganimning sababi..." },
+        { de: "Hiermit möchte ich...", uz: "Shu orqali men..." },
+        { de: "Ich wende mich an Sie, um...", uz: "Sizga ... uchun murojaat qilmoqdaman" }
+      ]},
+      { group: "So'rov / talab", items: [
+        { de: "Ich wäre Ihnen sehr dankbar, wenn...", uz: "Agar ... bo'lsa, Sizga juda minnatdor bo'lardim" },
+        { de: "Könnten Sie mir bitte mitteilen, ob...", uz: "Iltimos, menga xabar bera olasizmi..." }
+      ]},
+      { group: "Yakunlash", items: [
+        { de: "Für Ihre Bemühungen bedanke ich mich im Voraus.", uz: "Sa'y-harakatlaringiz uchun oldindan rahmat aytaman" },
+        { de: "Mit freundlichen Grüßen,", uz: "Hurmat bilan," }
+      ]}
+    ]
+  };
+
+  const KONNEKTOREN = [
+    { group: "Sabab (weil/da)", items: ["weil", "da", "deshalb", "denn"] },
+    { group: "Qarama-qarshilik", items: ["aber", "trotzdem", "obwohl", "dennoch"] },
+    { group: "Qo'shimcha fikr", items: ["außerdem", "zudem", "darüber hinaus", "auch"] },
+    { group: "Shart", items: ["wenn", "falls", "sonst"] },
+    { group: "Ketma-ketlik", items: ["zuerst", "dann", "danach", "schließlich"] },
+    { group: "Xulosa", items: ["also", "somit", "zusammenfassend"] }
+  ];
+
   /* ================= STATE ================= */
   let currentCategory = "teil1";
   let currentTask = null;
@@ -839,6 +973,11 @@
   const statsPanel = document.getElementById('statsPanel');
   const micBtn = document.getElementById('micBtn');
   const micStatus = document.getElementById('micStatus');
+  const vocabPanel = document.getElementById('vocabPanel');
+  const konnektBtn = document.getElementById('konnektBtn');
+  const konnektDropdown = document.getElementById('konnektDropdown');
+  const sampleBtn = document.getElementById('sampleBtn');
+  const samplePanel = document.getElementById('samplePanel');
 
   /* ================= TABS ================= */
   function renderTabs(){
@@ -888,10 +1027,15 @@
       <div class="task-footer">
         <span>Empf. Zeit: <b>${Math.round(cat.defaultTime/60)} Min.</b></span>
         <span>Anrede & Grußformel nicht vergessen</span>
+        <button class="btn vocab-toggle-btn" id="vocabToggleBtn" type="button">So'z boyligi 📖</button>
       </div>
       <button class="new-task-btn" id="newTaskBtn">Yangi mavzu ↻</button>
     `;
     document.getElementById('newTaskBtn').onclick = ()=> pickTask(false);
+    document.getElementById('vocabToggleBtn').onclick = toggleVocabPanel;
+    // Mavzu almashganda ochiq bo'lsa ham namuna javob va vokabulyar paneli yangi mavzuga mos yopiladi
+    samplePanel.style.display = 'none';
+    vocabPanel.style.display = 'none';
   }
 
   function updateTargetHint(){
@@ -1215,6 +1359,125 @@ ${text}
   }
 
   checkBtn.addEventListener('click', checkWithAI);
+
+  /* ================= SO'Z BOYLIGI PANELI ================= */
+  function renderVocabPanel(){
+    const groups = VOCAB[currentCategory] || [];
+    const groupsHtml = groups.map(g=>`
+      <div class="vocab-group">
+        <div class="vocab-group-title">${g.group}</div>
+        ${g.items.map(it=>`<div class="vocab-item">${it.de} <i>— ${it.uz}</i></div>`).join('')}
+      </div>
+    `).join('');
+    vocabPanel.innerHTML = `
+      <div class="vocab-panel-header">
+        <div class="vocab-panel-title">So'z boyligi va foydali iboralar</div>
+        <button class="vocab-close-btn" id="vocabCloseBtn" type="button">✕</button>
+      </div>
+      ${groupsHtml}
+    `;
+    document.getElementById('vocabCloseBtn').onclick = ()=>{ vocabPanel.style.display = 'none'; };
+  }
+  function toggleVocabPanel(){
+    const isHidden = vocabPanel.style.display === 'none' || !vocabPanel.style.display;
+    if(isHidden){
+      renderVocabPanel();
+      vocabPanel.style.display = 'block';
+      konnektDropdown.style.display = 'none';
+      konnektBtn.classList.remove('active');
+    } else {
+      vocabPanel.style.display = 'none';
+    }
+  }
+
+  /* ================= KONNEKTOREN YORDAMCHISI ================= */
+  function renderKonnektDropdown(){
+    konnektDropdown.innerHTML = KONNEKTOREN.map(g=>`
+      <div class="konnekt-group">
+        <div class="konnekt-group-title">${g.group}</div>
+        <div class="konnekt-chips">
+          ${g.items.map(w=>`<button type="button" class="konnekt-chip" data-word="${w}">${w}</button>`).join('')}
+        </div>
+      </div>
+    `).join('');
+    konnektDropdown.querySelectorAll('.konnekt-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=> insertAtCursor(chip.dataset.word + ' '));
+    });
+  }
+  function insertAtCursor(text){
+    const start = writingArea.selectionStart ?? writingArea.value.length;
+    const end = writingArea.selectionEnd ?? writingArea.value.length;
+    const before = writingArea.value.slice(0, start);
+    const after = writingArea.value.slice(end);
+    const needsSpaceBefore = before.length && !/\s$/.test(before);
+    writingArea.value = before + (needsSpaceBefore ? ' ' : '') + text + after;
+    const cursorPos = (before + (needsSpaceBefore ? ' ' : '') + text).length;
+    writingArea.focus();
+    writingArea.setSelectionRange(cursorPos, cursorPos);
+    updateCounts();
+    saveDraft();
+  }
+  konnektBtn.addEventListener('click', ()=>{
+    const isHidden = konnektDropdown.style.display === 'none' || !konnektDropdown.style.display;
+    if(isHidden){
+      renderKonnektDropdown();
+      konnektDropdown.style.display = 'block';
+      konnektBtn.classList.add('active');
+      vocabPanel.style.display = 'none';
+    } else {
+      konnektDropdown.style.display = 'none';
+      konnektBtn.classList.remove('active');
+    }
+  });
+
+  /* ================= NAMUNA JAVOB (MUSTERLÖSUNG) ================= */
+  async function generateSample(){
+    const isOpen = samplePanel.style.display === 'block';
+    if(isOpen){
+      samplePanel.style.display = 'none';
+      return;
+    }
+    samplePanel.style.display = 'block';
+    samplePanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Namuna javob tayyorlanmoqda...</div>`;
+    sampleBtn.disabled = true;
+
+    const cat = TASKS[currentCategory];
+    const pointsList = currentTask.points.map((p,i)=>`${i+1}. ${p}`).join('\n');
+
+    const systemPrompt = `Du bist ein Deutschlehrer und schreibst eine Musterlösung für die B1-Schreibprüfung (Niveau A2-B1, einfach und klar, aber alle Leitpunkte erfüllend). Der Text soll wie ein guter, aber realistischer B1-Prüfungstext klingen (nicht zu perfekt, nicht zu kompliziert).
+Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt, ohne Markdown-Codeblock, ohne einleitenden Text, exakt in diesem Format:
+{ "musterloesung": "<vollständiger Beispieltext auf Deutsch, der alle Leitpunkte abdeckt>" }`;
+
+    const userPrompt = `Aufgabe (${cat.label}): ${currentTask.title}
+Kontext: ${currentTask.context}
+Leitpunkte:
+${pointsList}
+Zielwortzahl: ca. ${cat.target} Wörter.`;
+
+    try{
+      const response = await fetch("/.netlify/functions/check-writing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt, userPrompt })
+      });
+      const parsed = await response.json();
+      if(parsed.error){ throw new Error(parsed.error); }
+      samplePanel.innerHTML = `
+        <div class="sample-panel-header">
+          <div class="sample-panel-title">Namuna javob (Musterlösung)</div>
+          <button class="vocab-close-btn" id="sampleCloseBtn" type="button">✕</button>
+        </div>
+        <div class="sample-text">${(parsed.musterloesung || '').replace(/\n/g,'<br>')}</div>
+      `;
+      document.getElementById('sampleCloseBtn').onclick = ()=>{ samplePanel.style.display = 'none'; };
+    }catch(err){
+      samplePanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
+      console.error("Sample generation error:", err);
+    }finally{
+      sampleBtn.disabled = false;
+    }
+  }
+  sampleBtn.addEventListener('click', generateSample);
 
   /* ================= OVOZ BILAN YOZISH (Speech-to-Text) ================= */
   const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
