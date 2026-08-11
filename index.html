@@ -514,10 +514,16 @@
         </div>
         <div class="timer-controls">
           <select class="timer-select" id="timerSelect">
+            <option value="300">5 daqiqa</option>
             <option value="600">10 daqiqa</option>
             <option value="900" selected>15 daqiqa</option>
+            <option value="1200">20 daqiqa</option>
             <option value="1500">25 daqiqa</option>
             <option value="1800">30 daqiqa</option>
+            <option value="2100">35 daqiqa</option>
+            <option value="2400">40 daqiqa</option>
+            <option value="2700">45 daqiqa</option>
+            <option value="3600">60 daqiqa</option>
           </select>
           <button class="btn primary" id="startBtn">Boshlash</button>
           <button class="btn" id="pauseBtn" disabled>Pauza</button>
@@ -1476,6 +1482,18 @@
   }
 
   /* ================= TASK ================= */
+  function ensureTimerOption(seconds){
+    const exists = Array.from(timerSelect.options).some(o => parseInt(o.value,10) === seconds);
+    if(!exists){
+      const opt = document.createElement('option');
+      opt.value = String(seconds);
+      opt.textContent = Math.round(seconds/60) + ' daqiqa';
+      const options = Array.from(timerSelect.options);
+      const insertBefore = options.find(o => parseInt(o.value,10) > seconds);
+      timerSelect.insertBefore(opt, insertBefore || null);
+    }
+  }
+
   function pickTask(resetTimerToDefault, forcedTitle){
     const pool = TASKS[currentCategory].items;
     let next;
@@ -1489,6 +1507,7 @@
     renderTaskCard();
     if(resetTimerToDefault){
       timerSeconds = TASKS[currentCategory].defaultTime;
+      ensureTimerOption(timerSeconds);
       timerSelect.value = String(timerSeconds);
       resetTimer();
     }
@@ -2077,6 +2096,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
       if(draft.text) writingArea.value = draft.text;
       if(draft.timerSeconds){
         timerSeconds = draft.timerSeconds;
+        ensureTimerOption(timerSeconds);
         timerSelect.value = String(timerSeconds);
       }
       timerRemaining = (typeof draft.timerRemaining === 'number') ? draft.timerRemaining : timerSeconds;
