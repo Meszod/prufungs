@@ -199,6 +199,38 @@
   .sample-panel-title{ font-family:'Fraunces', serif; font-weight:600; font-size:15px; }
   .sample-text{ font-size:14px; line-height:1.7; color:var(--ink); white-space:pre-wrap; }
 
+  /* ===== Level switch button ===== */
+  .level-switch-btn{ background:none; border:none; padding:0; cursor:pointer; }
+  .level-switch-btn:hover .stamp-badge{ transform:rotate(-2deg) scale(1.03); }
+
+  /* ===== Level selection modal (first visit) & popover (switch) ===== */
+  .level-modal-overlay, .level-popover-overlay{
+    display:none; position:fixed; inset:0; background:rgba(20,24,38,0.72);
+    z-index:999; align-items:center; justify-content:center; padding:20px;
+  }
+  .level-modal, .level-popover{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:2px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35); padding:28px 26px; max-width:480px; width:100%;
+    position:relative;
+  }
+  .level-modal::before, .level-popover::before{
+    content:""; position:absolute; top:0; left:26px; right:26px; height:3px;
+    background:repeating-linear-gradient(90deg, var(--gold) 0 10px, transparent 10px 20px); opacity:0.6;
+  }
+  .level-modal-title, .level-popover-title{ font-family:'Fraunces', serif; font-weight:600; font-size:19px; margin-bottom:8px; }
+  .level-modal-sub{ font-size:13px; color:var(--ink-soft); margin-bottom:18px; line-height:1.5; }
+  .level-modal-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .level-option{
+    border:1.5px solid var(--paper-line); border-radius:2px; padding:14px 12px; background:var(--paper);
+    cursor:pointer; text-align:left; transition:all .15s ease;
+  }
+  .level-option:hover{ border-color:var(--gold); background:rgba(156,123,46,0.06); }
+  .level-option.selected{ border-color:var(--green); background:rgba(58,107,74,0.08); }
+  .level-option .code{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:18px; color:var(--ink); }
+  .level-option .name{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .level-modal-overlay.open, .level-popover-overlay.open{ display:flex; }
+
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
   .task-col{ display:flex; flex-direction:column; }
@@ -220,6 +252,8 @@
     .tabs{ gap:6px; margin-bottom:0; }
     .tab{ font-size:11.5px; padding:8px 12px; flex:1 1 auto; text-align:center; }
     .stats-btn{ width:100%; }
+    .level-modal-grid{ grid-template-columns:repeat(2, 1fr); }
+    .level-modal, .level-popover{ padding:22px 18px; }
 
     .card, .paper-wrap, .timer-row, .feedback-panel{ padding:16px 16px 14px 16px; }
     .card::before, .feedback-panel::before{ left:16px; right:16px; }
@@ -444,14 +478,16 @@
   </div>
   <div style="display:flex; align-items:center; gap:16px;">
     <div class="header-right">
-      Niveau B1<br>Simulierte Prüfung
+      <span id="levelHeaderText">Niveau B1</span><br>Simulierte Prüfung
     </div>
-    <div class="stamp-badge"><span>B1</span><span>GEPRÜFT</span></div>
+    <button class="level-switch-btn" id="levelSwitchBtn" type="button" title="Darajani o'zgartirish">
+      <div class="stamp-badge"><span id="levelBadgeCode">B1</span><span>GEPRÜFT</span></div>
+    </button>
   </div>
 </header>
 
 <main>
-  <p class="intro-note">Bu vosita nemis tili <b>B1 darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.</p>
+  <p class="intro-note" id="introNote">Bu vosita nemis tili <b>B1 darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.</p>
 
   <div class="tabs-row">
     <div class="tabs" id="tabs"></div>
@@ -528,15 +564,31 @@
   </div>
 </main>
 
-<footer>SCHREIBEN·TRAINER — B1 — Übungsmodus, kein offizielles Prüfungsdokument</footer>
+<footer>SCHREIBEN·TRAINER — Übungsmodus, kein offizielles Prüfungsdokument</footer>
 
 <div class="finish-stamp" id="finishStamp"><span>FERTIG</span><span id="finishSub">0 Wörter</span></div>
+
+<div class="level-modal-overlay" id="levelModalOverlay">
+  <div class="level-modal">
+    <div class="level-modal-title">Qaysi darajada mashq qilmoqchisiz?</div>
+    <p class="level-modal-sub">Sizga mos daraja bo'yicha mavzular va vaqt cheklovlari tanlanadi. Buni keyin ham tepadagi muhr orqali o'zgartirishingiz mumkin.</p>
+    <div class="level-modal-grid" id="levelModalGrid"></div>
+  </div>
+</div>
+
+<div class="level-popover-overlay" id="levelPopoverOverlay">
+  <div class="level-popover">
+    <div class="level-popover-title">Darajani o'zgartirish</div>
+    <div class="level-modal-grid" id="levelPopoverGrid"></div>
+    <button class="btn" id="levelPopoverCloseBtn" style="margin-top:10px; width:100%;">Bekor qilish</button>
+  </div>
+</div>
 
 <script>
 (function(){
 
   /* ================= TASK BANK ================= */
-  const TASKS = {
+  const TASKS_B1 = {
     teil1: {
       label: "Teil 1 · Persönliche E-Mail",
       target: 80,
@@ -870,6 +922,374 @@
     }
   };
 
+  /* ================= A1 DARAJASI ================= */
+  const TASKS_A1 = {
+    teil1: {
+      label: "Teil 1 · Kurze Mitteilung",
+      target: 25,
+      defaultTime: 300,
+      items: [
+        {
+          title: "Absage wegen Krankheit",
+          context: "Sie sind krank und können heute nicht zur Arbeit kommen. Schreiben Sie eine kurze Nachricht an Ihren Chef.",
+          points: ["Sagen Sie, dass Sie krank sind.", "Sagen Sie, dass Sie heute nicht kommen können.", "Verabschieden Sie sich höflich."]
+        },
+        {
+          title: "Einladung zum Kaffee",
+          context: "Schreiben Sie eine kurze Nachricht an Ihre Freundin und laden Sie sie zum Kaffee ein.",
+          points: ["Grüßen Sie Ihre Freundin.", "Laden Sie sie zum Kaffee ein.", "Sagen Sie, wann und wo."]
+        },
+        {
+          title: "Verspätung",
+          context: "Sie kommen zu einem Treffen zu spät. Schreiben Sie eine kurze Nachricht.",
+          points: ["Entschuldigen Sie sich.", "Sagen Sie, wann Sie kommen.", "Bitten Sie um Geduld."]
+        },
+        {
+          title: "Postkarte aus dem Urlaub",
+          context: "Sie sind im Urlaub. Schreiben Sie eine Postkarte an einen Freund.",
+          points: ["Sagen Sie, wo Sie sind.", "Beschreiben Sie das Wetter.", "Sagen Sie, wie es Ihnen gefällt."]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Kurzer Brief",
+      target: 35,
+      defaultTime: 600,
+      items: [
+        {
+          title: "Geburtstagswünsche",
+          context: "Ihr Freund hat bald Geburtstag. Schreiben Sie ihm einen kurzen Brief.",
+          points: ["Gratulieren Sie zum Geburtstag.", "Fragen Sie, ob er eine Feier macht.", "Sagen Sie, dass Sie ihn bald besuchen möchten."]
+        },
+        {
+          title: "Meine neue Wohnung",
+          context: "Sie haben eine neue Wohnung. Schreiben Sie einem Freund darüber.",
+          points: ["Sagen Sie, wo die Wohnung ist.", "Beschreiben Sie die Wohnung kurz.", "Laden Sie Ihren Freund ein."]
+        },
+        {
+          title: "Wochenendplan",
+          context: "Sie schreiben einem Freund über Ihre Pläne am Wochenende.",
+          points: ["Sagen Sie, was Sie am Wochenende machen.", "Fragen Sie, was er macht.", "Schlagen Sie ein Treffen vor."]
+        },
+        {
+          title: "Danke für das Geschenk",
+          context: "Sie haben von einer Freundin ein Geschenk bekommen. Bedanken Sie sich schriftlich.",
+          points: ["Bedanken Sie sich für das Geschenk.", "Sagen Sie, warum es Ihnen gefällt.", "Wünschen Sie ihr alles Gute."]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formular / Anfrage",
+      target: 20,
+      defaultTime: 300,
+      items: [
+        {
+          title: "Anmeldung zum Deutschkurs",
+          context: "Sie möchten sich für einen Deutschkurs anmelden. Schreiben Sie eine kurze Anfrage.",
+          points: ["Stellen Sie sich kurz vor.", "Fragen Sie nach dem Kursbeginn.", "Fragen Sie nach dem Preis."]
+        },
+        {
+          title: "Öffnungszeiten erfragen",
+          context: "Sie möchten wissen, wann eine Bibliothek geöffnet ist. Schreiben Sie eine kurze Nachricht.",
+          points: ["Grüßen Sie höflich.", "Fragen Sie nach den Öffnungszeiten.", "Bedanken Sie sich."]
+        },
+        {
+          title: "Zimmer reservieren",
+          context: "Sie möchten ein Hotelzimmer reservieren. Schreiben Sie eine kurze Anfrage.",
+          points: ["Sagen Sie, wann Sie kommen.", "Sagen Sie, wie viele Personen.", "Fragen Sie nach dem Preis."]
+        },
+        {
+          title: "Terminanfrage beim Arzt",
+          context: "Sie brauchen einen Termin beim Arzt. Schreiben Sie eine kurze Anfrage.",
+          points: ["Sagen Sie Ihren Namen.", "Sagen Sie, warum Sie kommen möchten.", "Fragen Sie nach einem freien Termin."]
+        }
+      ]
+    }
+  };
+
+  /* ================= A2 DARAJASI ================= */
+  const TASKS_A2 = {
+    teil1: {
+      label: "Teil 1 · Persönlicher Brief",
+      target: 45,
+      defaultTime: 600,
+      items: [
+        {
+          title: "Meine Familie",
+          context: "Ein neuer Brieffreund möchte mehr über Sie erfahren. Schreiben Sie ihm über Ihre Familie.",
+          points: ["Stellen Sie Ihre Familie kurz vor.", "Erzählen Sie, was Sie zusammen machen.", "Fragen Sie nach seiner Familie."]
+        },
+        {
+          title: "Mein Hobby",
+          context: "Schreiben Sie einem Freund über Ihr Lieblingshobby.",
+          points: ["Sagen Sie, welches Hobby Sie haben.", "Erzählen Sie, wie oft Sie es machen.", "Fragen Sie, ob er das Hobby auch mag."]
+        },
+        {
+          title: "Ein schöner Tag",
+          context: "Erzählen Sie einem Freund von einem schönen Tag, den Sie erlebt haben.",
+          points: ["Beschreiben Sie, was passiert ist.", "Sagen Sie, warum der Tag schön war.", "Fragen Sie nach seinem letzten schönen Tag."]
+        },
+        {
+          title: "Umzug in eine andere Stadt",
+          context: "Sie sind vor kurzem umgezogen. Erzählen Sie einem Freund davon.",
+          points: ["Sagen Sie, wohin Sie umgezogen sind.", "Erzählen Sie, wie es Ihnen dort gefällt.", "Laden Sie Ihren Freund ein, Sie zu besuchen."]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Einfacher Forumsbeitrag",
+      target: 55,
+      defaultTime: 900,
+      items: [
+        {
+          title: "Freizeit in der Stadt",
+          context: "Im Forum wird gefragt, was man am Wochenende in der Stadt machen kann.",
+          points: ["Sagen Sie, was Sie am Wochenende gern machen.", "Nennen Sie einen Ort, den Sie mögen.", "Empfehlen Sie diesen Ort den anderen."]
+        },
+        {
+          title: "Lieblingsjahreszeit",
+          context: "Im Forum wird diskutiert, welche Jahreszeit am schönsten ist.",
+          points: ["Sagen Sie, welche Jahreszeit Sie am liebsten mögen.", "Erklären Sie warum.", "Fragen Sie nach der Meinung der anderen."]
+        },
+        {
+          title: "Gesunde Ernährung",
+          context: "Im Forum wird über gesunde Ernährung gesprochen.",
+          points: ["Sagen Sie, was Sie normalerweise essen.", "Nennen Sie ein gesundes Gericht.", "Geben Sie einen Tipp für gesundes Essen."]
+        },
+        {
+          title: "Haustiere",
+          context: "Im Forum wird gefragt, ob Haustiere glücklich machen.",
+          points: ["Sagen Sie, ob Sie ein Haustier haben.", "Erzählen Sie, warum Haustiere schön sind.", "Sagen Sie Ihre Meinung dazu."]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formelle Mitteilung",
+      target: 35,
+      defaultTime: 600,
+      items: [
+        {
+          title: "Kursanmeldung ändern",
+          context: "Sie möchten Ihre Kurszeit ändern. Schreiben Sie eine formelle Nachricht an die Schule.",
+          points: ["Nennen Sie Ihren Kurs.", "Erklären Sie, welche Änderung Sie möchten.", "Bitten Sie um eine Antwort."]
+        },
+        {
+          title: "Reklamation im Geschäft",
+          context: "Ein gekauftes Produkt ist kaputt. Schreiben Sie eine formelle Nachricht an das Geschäft.",
+          points: ["Beschreiben Sie das Produkt.", "Erklären Sie das Problem.", "Fragen Sie nach einer Lösung."]
+        },
+        {
+          title: "Wohnungsanfrage",
+          context: "Sie interessieren sich für eine Wohnungsanzeige. Schreiben Sie eine Anfrage.",
+          points: ["Stellen Sie sich kurz vor.", "Fragen Sie nach der Wohnung.", "Bitten Sie um einen Besichtigungstermin."]
+        },
+        {
+          title: "Krankmeldung im Kurs",
+          context: "Sie können wegen Krankheit nicht zum Deutschkurs kommen. Informieren Sie die Schule.",
+          points: ["Sagen Sie, dass Sie krank sind.", "Sagen Sie, wie lange Sie fehlen.", "Bitten Sie um die verpassten Materialien."]
+        }
+      ]
+    }
+  };
+
+  /* ================= B2 DARAJASI ================= */
+  const TASKS_B2 = {
+    teil1: {
+      label: "Teil 1 · Persönlicher/informeller Brief",
+      target: 120,
+      defaultTime: 1200,
+      items: [
+        {
+          title: "Berufliche Veränderung",
+          context: "Ein Freund überlegt, den Beruf zu wechseln und bittet Sie um Ihre Meinung.",
+          points: ["Reagieren Sie auf sein Anliegen.", "Berichten Sie von eigenen Erfahrungen mit beruflichen Entscheidungen.", "Geben Sie ihm konkrete Ratschläge.", "Bieten Sie an, das Thema persönlich zu besprechen."]
+        },
+        {
+          title: "Auslandsjahr",
+          context: "Ihre Freundin überlegt, ein Jahr im Ausland zu studieren, und bittet um Ihren Rat.",
+          points: ["Gehen Sie auf ihre Bedenken ein.", "Nennen Sie Vor- und Nachteile eines Auslandsjahrs.", "Berichten Sie von eigenen Erfahrungen, falls vorhanden.", "Geben Sie eine klare Empfehlung."]
+        },
+        {
+          title: "Konflikt mit Mitbewohner",
+          context: "Ein Freund hat Probleme mit seinem Mitbewohner und bittet Sie um Rat.",
+          points: ["Zeigen Sie Verständnis für die Situation.", "Schlagen Sie mögliche Lösungswege vor.", "Berichten Sie von einer ähnlichen eigenen Erfahrung.", "Bieten Sie Ihre Unterstützung an."]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Leserbrief / Kommentar",
+      target: 150,
+      defaultTime: 1800,
+      items: [
+        {
+          title: "Digitalisierung des Unterrichts",
+          context: "In einer Zeitung wird über die zunehmende Digitalisierung des Schulunterrichts diskutiert. Verfassen Sie einen Leserbrief.",
+          points: ["Fassen Sie die Diskussion kurz zusammen.", "Nennen Sie Argumente für die Digitalisierung.", "Nennen Sie Argumente dagegen.", "Formulieren Sie eine begründete eigene Position."]
+        },
+        {
+          title: "Work-Life-Balance",
+          context: "Ein Artikel behauptet, dass die junge Generation keine echte Work-Life-Balance mehr anstrebt. Schreiben Sie einen Kommentar.",
+          points: ["Nehmen Sie Stellung zur These des Artikels.", "Belegen Sie Ihre Meinung mit Beispielen.", "Diskutieren Sie eine Gegenposition.", "Ziehen Sie ein Fazit."]
+        },
+        {
+          title: "Konsumverhalten und Nachhaltigkeit",
+          context: "Ein Zeitungsartikel diskutiert, ob nachhaltiger Konsum wirklich einen Unterschied macht.",
+          points: ["Beschreiben Sie das zentrale Argument des Artikels.", "Nennen Sie Vor- und Nachteile nachhaltigen Konsums.", "Beziehen Sie kritisch Stellung.", "Formulieren Sie einen Ausblick."]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formelle E-Mail",
+      target: 100,
+      defaultTime: 900,
+      items: [
+        {
+          title: "Beschwerde über Serviceleistung",
+          context: "Sie sind mit dem Kundenservice eines Unternehmens unzufrieden. Verfassen Sie eine formelle Beschwerde.",
+          points: ["Schildern Sie den Sachverhalt präzise.", "Erläutern Sie die Auswirkungen auf Sie.", "Fordern Sie eine konkrete Maßnahme."]
+        },
+        {
+          title: "Bewerbung um ein Stipendium",
+          context: "Sie bewerben sich um ein Stipendium für ein Auslandssemester.",
+          points: ["Stellen Sie sich und Ihre Qualifikationen vor.", "Begründen Sie Ihr Interesse am Stipendium.", "Erläutern Sie Ihre Ziele."]
+        },
+        {
+          title: "Widerspruch gegen eine Entscheidung",
+          context: "Sie möchten gegen eine Entscheidung Ihrer Universität formell Widerspruch einlegen.",
+          points: ["Beschreiben Sie die Entscheidung.", "Begründen Sie, warum Sie widersprechen.", "Fordern Sie eine erneute Prüfung."]
+        }
+      ]
+    }
+  };
+
+  /* ================= C1 DARAJASI ================= */
+  const TASKS_C1 = {
+    teil1: {
+      label: "Teil 1 · Diskussionsbeitrag",
+      target: 180,
+      defaultTime: 1800,
+      items: [
+        {
+          title: "Künstliche Intelligenz am Arbeitsplatz",
+          context: "In einer Fachdiskussion wird debattiert, inwieweit KI menschliche Arbeitsplätze ersetzen sollte.",
+          points: ["Ordnen Sie das Thema gesellschaftlich ein.", "Diskutieren Sie Chancen und Risiken differenziert.", "Beziehen Sie eine begründete, nuancierte Position.", "Reflektieren Sie mögliche zukünftige Entwicklungen."]
+        },
+        {
+          title: "Bedingungsloses Grundeinkommen",
+          context: "Es wird diskutiert, ob ein bedingungsloses Grundeinkommen sinnvoll wäre.",
+          points: ["Erläutern Sie das Konzept kurz.", "Analysieren Sie ökonomische und soziale Argumente.", "Beziehen Sie kritisch Stellung.", "Diskutieren Sie mögliche Umsetzungsprobleme."]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Analytischer Bericht",
+      target: 200,
+      defaultTime: 1800,
+      items: [
+        {
+          title: "Wandel der Arbeitswelt",
+          context: "Verfassen Sie einen analytischen Bericht über den Wandel der Arbeitswelt durch Homeoffice und Digitalisierung.",
+          points: ["Beschreiben Sie die zentralen Entwicklungen.", "Analysieren Sie Auswirkungen auf Arbeitnehmer und Unternehmen.", "Bewerten Sie die langfristigen Konsequenzen.", "Formulieren Sie eine fundierte Schlussfolgerung."]
+        },
+        {
+          title: "Migration und Integration",
+          context: "Schreiben Sie einen differenzierten Bericht über Herausforderungen und Chancen der Integration.",
+          points: ["Skizzieren Sie die Ausgangslage.", "Analysieren Sie zentrale Herausforderungen.", "Diskutieren Sie erfolgreiche Integrationsansätze.", "Ziehen Sie ein begründetes Fazit."]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formelles Schreiben",
+      target: 150,
+      defaultTime: 1200,
+      items: [
+        {
+          title: "Initiativbewerbung",
+          context: "Verfassen Sie eine Initiativbewerbung an ein Unternehmen, bei dem keine offene Stelle ausgeschrieben ist.",
+          points: ["Stellen Sie sich professionell vor.", "Begründen Sie Ihr Interesse an genau diesem Unternehmen.", "Heben Sie relevante Qualifikationen hervor."]
+        },
+        {
+          title: "Formelle Beschwerde an eine Behörde",
+          context: "Sie möchten sich formell bei einer Behörde über eine lange Bearbeitungszeit beschweren.",
+          points: ["Schildern Sie den Sachverhalt sachlich.", "Begründen Sie die Unzumutbarkeit der Verzögerung.", "Fordern Sie konkrete nächste Schritte."]
+        }
+      ]
+    }
+  };
+
+  /* ================= C2 DARAJASI ================= */
+  const TASKS_C2 = {
+    teil1: {
+      label: "Teil 1 · Essay / Stellungnahme",
+      target: 220,
+      defaultTime: 2100,
+      items: [
+        {
+          title: "Sprache und Macht",
+          context: "Verfassen Sie einen Essay über den Zusammenhang zwischen Sprache und gesellschaftlicher Macht.",
+          points: ["Entwickeln Sie eine klare These.", "Argumentieren Sie mehrschichtig mit Beispielen.", "Setzen Sie sich mit Gegenpositionen auseinander.", "Formulieren Sie eine anspruchsvolle Schlussfolgerung."]
+        },
+        {
+          title: "Grenzen des technologischen Fortschritts",
+          context: "Schreiben Sie eine Stellungnahme darüber, ob technologischer Fortschritt ethisch begrenzt werden sollte.",
+          points: ["Erörtern Sie die Problematik vielschichtig.", "Beziehen Sie philosophische und gesellschaftliche Aspekte ein.", "Entwickeln Sie eine eigenständige, differenzierte Position."]
+        }
+      ]
+    },
+    teil2: {
+      label: "Teil 2 · Wissenschaftlich-analytischer Text",
+      target: 250,
+      defaultTime: 2100,
+      items: [
+        {
+          title: "Kulturelle Identität in der Globalisierung",
+          context: "Verfassen Sie einen analytischen Text über die Transformation kultureller Identität im Zeitalter der Globalisierung.",
+          points: ["Definieren Sie zentrale Begriffe präzise.", "Analysieren Sie Wechselwirkungen zwischen Globalisierung und Identität.", "Diskutieren Sie unterschiedliche Forschungsperspektiven.", "Entwickeln Sie eine begründete Synthese."]
+        },
+        {
+          title: "Ethik autonomer Systeme",
+          context: "Schreiben Sie einen analytischen Text über ethische Fragestellungen autonomer, KI-gesteuerter Systeme.",
+          points: ["Skizzieren Sie den aktuellen Diskussionsstand.", "Analysieren Sie zentrale ethische Dilemmata.", "Bewerten Sie unterschiedliche Lösungsansätze kritisch."]
+        }
+      ]
+    },
+    teil3: {
+      label: "Teil 3 · Formelles/offizielles Schreiben",
+      target: 180,
+      defaultTime: 1500,
+      items: [
+        {
+          title: "Offizielle Stellungnahme im Namen einer Institution",
+          context: "Verfassen Sie eine offizielle Stellungnahme im Namen einer Institution zu einer kontroversen öffentlichen Angelegenheit.",
+          points: ["Formulieren Sie die Position klar und diplomatisch.", "Begründen Sie die Position mit stichhaltigen Argumenten.", "Berücksichtigen Sie mögliche Kritik angemessen."]
+        },
+        {
+          title: "Formelle Petition",
+          context: "Verfassen Sie eine formelle Petition an eine Entscheidungsinstanz zu einem gesellschaftlich relevanten Thema.",
+          points: ["Stellen Sie das Anliegen präzise dar.", "Untermauern Sie die Forderung mit fundierten Argumenten.", "Fordern Sie konkrete Maßnahmen ein."]
+        }
+      ]
+    }
+  };
+
+  const LEVEL_META = {
+    a1: { code: "A1", name: "Boshlang'ich" },
+    a2: { code: "A2", name: "Asosiy" },
+    b1: { code: "B1", name: "O'rta" },
+    b2: { code: "B2", name: "Yuqori o'rta" },
+    c1: { code: "C1", name: "Ilg'or" },
+    c2: { code: "C2", name: "Mukammal" }
+  };
+
+  const LEVELS = {
+    a1: TASKS_A1,
+    a2: TASKS_A2,
+    b1: TASKS_B1,
+    b2: TASKS_B2,
+    c1: TASKS_C1,
+    c2: TASKS_C2
+  };
+
   /* ================= SO'Z BOYLIGI (VOCAB) ================= */
   const VOCAB = {
     teil1: [
@@ -939,6 +1359,9 @@
   ];
 
   /* ================= STATE ================= */
+  const LEVEL_KEY = 'schreibenTrainer_level_v1';
+  let currentLevel = 'b1';
+  let TASKS = LEVELS[currentLevel];
   let currentCategory = "teil1";
   let currentTask = null;
   let timerSeconds = 900;
@@ -978,6 +1401,67 @@
   const konnektDropdown = document.getElementById('konnektDropdown');
   const sampleBtn = document.getElementById('sampleBtn');
   const samplePanel = document.getElementById('samplePanel');
+  const levelModalOverlay = document.getElementById('levelModalOverlay');
+  const levelModalGrid = document.getElementById('levelModalGrid');
+  const levelPopoverOverlay = document.getElementById('levelPopoverOverlay');
+  const levelPopoverGrid = document.getElementById('levelPopoverGrid');
+  const levelPopoverCloseBtn = document.getElementById('levelPopoverCloseBtn');
+  const levelSwitchBtn = document.getElementById('levelSwitchBtn');
+  const levelHeaderText = document.getElementById('levelHeaderText');
+  const levelBadgeCode = document.getElementById('levelBadgeCode');
+  const introNote = document.getElementById('introNote');
+
+  /* ================= LEVEL (DARAJA) ================= */
+  function applyLevel(levelKey, opts){
+    opts = opts || {};
+    currentLevel = levelKey;
+    TASKS = LEVELS[currentLevel];
+    currentCategory = "teil1";
+    const meta = LEVEL_META[currentLevel];
+    levelHeaderText.textContent = 'Niveau ' + meta.code;
+    levelBadgeCode.textContent = meta.code;
+    introNote.innerHTML = `Bu vosita nemis tili <b>${meta.code} darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.`;
+    try{ localStorage.setItem(LEVEL_KEY, currentLevel); }catch(e){}
+    if(!opts.skipRender){
+      renderTabs();
+      pickTask(true);
+      vocabPanel.style.display = 'none';
+      samplePanel.style.display = 'none';
+      feedbackPanel.style.display = 'none';
+      konnektDropdown.style.display = 'none';
+      konnektBtn.classList.remove('active');
+    }
+  }
+  function buildLevelGrid(container, onSelect){
+    container.innerHTML = Object.keys(LEVEL_META).map(key=>{
+      const m = LEVEL_META[key];
+      const sel = key === currentLevel ? ' selected' : '';
+      return `<button type="button" class="level-option${sel}" data-level="${key}">
+        <div class="code">${m.code}</div>
+        <div class="name">${m.name}</div>
+      </button>`;
+    }).join('');
+    container.querySelectorAll('.level-option').forEach(btn=>{
+      btn.addEventListener('click', ()=> onSelect(btn.dataset.level));
+    });
+  }
+  function openLevelModal(){
+    buildLevelGrid(levelModalGrid, (key)=>{
+      applyLevel(key);
+      levelModalOverlay.classList.remove('open');
+    });
+    levelModalOverlay.classList.add('open');
+  }
+  function openLevelPopover(){
+    buildLevelGrid(levelPopoverGrid, (key)=>{
+      applyLevel(key);
+      levelPopoverOverlay.classList.remove('open');
+    });
+    levelPopoverOverlay.classList.add('open');
+  }
+  levelSwitchBtn.addEventListener('click', openLevelPopover);
+  levelPopoverCloseBtn.addEventListener('click', ()=> levelPopoverOverlay.classList.remove('open'));
+  levelPopoverOverlay.addEventListener('click', (e)=>{ if(e.target === levelPopoverOverlay) levelPopoverOverlay.classList.remove('open'); });
 
   /* ================= TABS ================= */
   function renderTabs(){
@@ -1046,6 +1530,7 @@
   function saveDraft(){
     try{
       const draft = {
+        level: currentLevel,
         category: currentCategory,
         taskTitle: currentTask ? currentTask.title : null,
         text: writingArea.value,
@@ -1566,10 +2051,25 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
   }
 
   /* ================= INIT ================= */
-  renderTabs();
+  (function initApp(){
+    let storedLevel = null;
+    try{ storedLevel = localStorage.getItem(LEVEL_KEY); }catch(e){}
 
-  (function initFromDraft(){
     const draft = loadDraft();
+    const levelToUse = (draft && draft.level && LEVELS[draft.level]) ? draft.level : storedLevel;
+
+    if(!levelToUse || !LEVELS[levelToUse]){
+      // Birinchi marta kirilmoqda — daraja so'raladi
+      renderTabs();
+      pickTask(true);
+      updateCounts();
+      renderTimer();
+      openLevelModal();
+      return;
+    }
+
+    applyLevel(levelToUse, {skipRender:true});
+
     if(draft && draft.category && TASKS[draft.category]){
       currentCategory = draft.category;
       renderTabs();
@@ -1583,12 +2083,13 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
       renderTimer();
       timerStateLabel.textContent = 'Bereit';
     } else {
+      renderTabs();
       pickTask(true);
     }
-  })();
 
-  updateCounts();
-  renderTimer();
+    updateCounts();
+    renderTimer();
+  })();
 
 })();
 </script>
