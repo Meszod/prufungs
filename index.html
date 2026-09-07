@@ -480,6 +480,9 @@
     <div class="header-right">
       <span id="levelHeaderText">Niveau B1</span><br>Simulierte Prüfung
     </div>
+    <button class="level-switch-btn" id="arenaBtn" type="button" title="ARENA bo'limini tanlash" style="display:none;">
+      <div class="stamp-badge"><span>ARENA</span><span id="arenaBadgeSub">TANLASH</span></div>
+    </button>
     <button class="level-switch-btn" id="levelSwitchBtn" type="button" title="Darajani o'zgartirish">
       <div class="stamp-badge"><span id="levelBadgeCode">B1</span><span>GEPRÜFT</span></div>
     </button>
@@ -587,6 +590,14 @@
     <div class="level-popover-title">Darajani o'zgartirish</div>
     <div class="level-modal-grid" id="levelPopoverGrid"></div>
     <button class="btn" id="levelPopoverCloseBtn" style="margin-top:10px; width:100%;">Bekor qilish</button>
+  </div>
+</div>
+
+<div class="level-popover-overlay" id="arenaPopoverOverlay">
+  <div class="level-popover">
+    <div class="level-popover-title">ARENA — bo'limni tanlang</div>
+    <div class="level-modal-grid" id="arenaPopoverGrid"></div>
+    <button class="btn" id="arenaPopoverCloseBtn" style="margin-top:10px; width:100%;">Bekor qilish</button>
   </div>
 </div>
 
@@ -1265,6 +1276,174 @@
     c2: TASKS_C2
   };
 
+  /* ================= ARENA (B1 uchun qo'shimcha mavzular to'plami) =================
+     ARENA faqat B1 darajasida ko'rinadi (bootstrap: updateArenaVisibility()).
+     Har bir bo'lim (s1..s10) TASKS_* bilan bir xil shaklga ega (teil1/teil2/teil3 →
+     label/target/defaultTime/items), shuning uchun mavjud renderTabs()/pickTask()/
+     renderTaskCard() kodi hech qanday o'zgarishsiz qayta ishlatiladi.
+     Yangi mavzu qo'shish uchun tegishli bo'limning items massivига yangi obyekt qo'shish kifoya. */
+  const ARENA_SECTIONS = {
+    s1: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Jogging – die ideale Sportart für die Freizeit", context: "In einem Internetforum liest du den folgenden Beitrag:\n\nJogging – die ideale Sportart für die Freizeit\n05.12. - 13:24 Uhr / Marko schrieb:\nWenn ich im Stadtpark oder am Fluss entlang laufe, dabei meine Lieblingsmusik höre und entspanne, tun mir meine Freunde, die zur gleichen Zeit auf dem benachbarten Sportplatz Fußball spielen, fast leid. Sie strapazieren ihren Körper und können sich jederzeit verletzen. Das finde ich überhaupt nicht sinnvoll. Ihr solltet alle einmal Jogging ausprobieren!", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Vielleicht im Ausland studieren?", context: "Du überlegst, ob du nach dem Schulabschluss im Ausland studieren sollst. Schreibe einen Internet-Beitrag zu diesem Thema.", points: ["Äußere deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Absage bei der Orchesterprobe", context: "Aus einem wichtigen Grund kannst du heute Abend bei der Probe des Schulorchesters, wo du Trompete spielst, nicht anwesend sein. Schreibe an die Musiklehrerin, Frau Gerlach, die das Orchester betreut.", points: ["Entschuldige dich höflich.", "Erkläre, warum du an der Probe nicht teilnehmen kannst."] }
+      ]}
+    },
+    s2: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Umzug in eine neue Wohnung", context: "Du bist vor kurzer Zeit mit deiner Familie in ein neues Haus / eine neue Wohnung umgezogen. Nachdem nun alles seinen Platz gefunden hat, schreibst du einem Freund / einer Freundin, der/die in einer anderen Stadt wohnt, eine E-Mail, um ihn/sie über den Umzug zu informieren.", points: [
+          "Beschreibe: Wie sieht euer neues Haus / eure neue Wohnung und insbesondere dein Zimmer aus?",
+          "Begründe: Aus welchem Grund seid ihr umgezogen?",
+          "Schlag deinem Freund / deiner Freundin vor, dich bei der nächsten Gelegenheit zu besuchen."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Wie lange vor dem Computer? Wer regelt das?", context: "In einem Internetforum liest du den folgenden Beitrag:\n\nWie lange vor dem Computer? Wer regelt das?\n12.12. - 11:03 Uhr / Karin schrieb:\nSowohl mein Vater als auch meine Mutter verbringen täglich berufsbedingt mehrere Stunden vor dem Computer, das Handy verwenden sie zu Hause nur zum Telefonieren und Texten. Wenn ich nach Erledigung meiner Hausaufgaben für die Schule ein bisschen am Computer spielen oder mit meiner Clique chatten will, heißt es dann oft: „Mach den Computer aus, lies lieber ein Buch!“", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Absage für das Gartenfest der Nachbarn", context: "Eure Nachbarn, Herr und Frau Brinkmann, haben dich und deine Familie zu einem Gartenfest am kommenden Sonntag eingeladen. Aus einem wichtigen Grund könnt ihr aber nicht anwesend sein.", points: ["Entschuldige dich höflich.", "Erkläre, warum deine Eltern und du beim Fest nicht anwesend sein werdet."] }
+      ]}
+    },
+    s3: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Eine neue interessante Bekanntschaft", context: "Du hast neulich die Bekanntschaft einer sehr interessanten Person gemacht, die dir sofort gefallen hat. Heute schreibst du einem Freund / einer Freundin, um darüber zu berichten.", points: [
+          "Beschreibe: Wann, wo und wie hast du diese Person kennengelernt?",
+          "Begründe: Aus welchem Grund hat sie dir gefallen?",
+          "Schlag deinem Freund / deiner Freundin ein gemeinsames Treffen vor, wo er/sie diese Person kennenlernen kann."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Ein Streit ist nicht das Ende der Welt", context: "Im Redaktionsblog einer Jugendzeitschrift liest du den folgenden Beitrag:\n\nEin Streit ist nicht das Ende der Welt\n23.03. - 19:57 Uhr / Erwin H. schrieb:\nNatürlich ist wichtig, mit wem und aus welchem Grund man sich gestritten hat. Ein Streit mit dem Bruder, der besten Freundin oder den Eltern tut viel mehr weh als ein Streit mit einer weniger wichtigen Person. Kinder und Jugendliche sind in dieser Hinsicht besonders sensibel, sie nehmen solche Konflikte sehr ernst. Mein Tipp: Offen miteinander reden, das ist der sichere Weg zur Lösung aller Probleme.", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Absage bei der Regalmontage", context: "Du hast Frau Schwab, einer guten Freundin deiner Mutter, versprochen, ihr übermorgen bei der Montage eines neuen Bücherregals in ihrem Büro zu helfen. Aus einem wichtigen Grund kannst du jedoch dein Versprechen nicht einhalten.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du ihr übermorgen nicht helfen kannst."] }
+      ]}
+    },
+    s4: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Ein neues Hobby entdeckt", context: "Du beschäftigst dich in letzter Zeit mit einem neuen Hobby (z. B. Fotografieren, Yoga, Malen etc.), das du besonders interessant findest. Heute schreibst du einem Freund / einer Freundin, um darüber zu berichten.", points: [
+          "Beschreibe dein neues Hobby genauer.",
+          "Begründe: Aus welchem Grund findest du es so interessant?",
+          "Schlag deinem Freund / deiner Freundin vor, dich zu besuchen, damit du ihm/ihr dein neues Hobby näher präsentieren kannst."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Lasst das Theater nicht sterben!", context: "In einem Kultur-Forum liest du den folgenden Beitrag:\n\nLasst das Theater nicht sterben!\n04.02. - 10:55 Uhr / Annette schrieb:\nEs gibt Leute, besonders junge Leute, die noch nie in ihrem Leben im Theater gewesen sind. Wenn sie überhaupt mit Freunden ausgehen - denn immer häufiger treffen sie sich und sehen fern oder spielen Computerspiele - dann gehen sie in der Regel ins Kino und essen anschließend Fastfood. Dass eine Theatervorstellung den Geist und die Seele bildet, wissen sie nicht, und das finde ich traurig.", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Verspäteter Bericht fürs Schulmagazin", context: "Du sollst bis Ende der Woche einen Bericht über ein Projekt abliefern, an dem du teilgenommen hast, damit er in der nächsten Ausgabe eures Schulmagazins veröffentlicht wird. Aus einem wichtigen Grund kannst du den Abgabetermin nicht einhalten. Schreibe an deinen Deutschlehrer, Herrn Bieler, der für das Magazin zuständig ist.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund dein Bericht nicht rechtzeitig fertig sein kann."] }
+      ]}
+    },
+    s5: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Als Rucksacktourist unterwegs", context: "Du hast beschlossen, in den kommenden Sommerferien dein Heimatland als Rucksacktourist zu erkunden. Heute schreibst du einem deutschen Freund / einer deutschen Freundin, um ihm/ihr von deinem Plan zu erzählen.", points: [
+          "Begründe: Was hat dich dazu gebracht, als Rucksacktourist auf die Reise zu gehen?",
+          "Beschreibe: Welche Orte planst du zu besuchen?",
+          "Schlag deinem Freund / deiner Freundin vor, dich im kommenden Sommer zu begleiten."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Der Fremdsprachenunterricht muss lebendiger werden", context: "In einer Schulzeitschrift liest du den folgenden Beitrag:\n\nDer Fremdsprachenunterricht muss lebendiger werden\n15.12. - 22:15 Uhr / Igor schrieb:\nHand aufs Herz: Seid ihr mit dem Fremdsprachenunterricht an eurer Schule wirklich zufrieden? Da geht es doch immer nur um Grammatik und Wortschatz - nützliches, aber trockenes Wissen. Es wird kaum in der Fremdsprache diskutiert und über die Kultur des Landes, dessen Sprache unterrichtet wird, erfährt man nicht viel. Sind die Schüler faul, die Lehrer nicht qualifiziert genug oder die Bücher schlecht? Was meint ihr?", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Buch noch nicht zurückgegeben", context: "Frau Knapp, Mutter einer Klassenkameradin von dir, hat dir vor zwei Wochen ein Buch geliehen, das du für eine Schularbeit brauchtest. Du solltest das Buch eigentlich schon gestern zurückgegeben haben, hast das aber aus einem wichtigen Grund nicht getan.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du das Buch noch nicht zurückgeschickt hast."] }
+      ]}
+    },
+    s6: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Meine Wahl der Arbeitsgemeinschaft (AG)", context: "Zu Beginn des neuen Schuljahres muss man sich für die Teilnahme an einer AG (= Arbeitsgemeinschaft, z. B. Sport, Theater, Informatik etc.) entscheiden. Das hast du bereits getan und bist mit deiner Wahl besonders zufrieden. Informiere nun deinen Freund / deine Freundin darüber.", points: [
+          "Beschreibe: Für welche AG hast du dich entschieden und womit beschäftigt man sich da?",
+          "Begründe: Was hat dich bei deiner Entscheidung beeinflusst?",
+          "Schlag deinem Freund / deiner Freundin vor zu überlegen, ob er/sie an derselben AG teilnehmen möchte."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Was ist im Beruf wichtig?", context: "In einem Jugendmagazin liest du den folgenden Beitrag:\n\nWas ist im Beruf wichtig?\n05.06. - 14:23 Uhr / Sonja schrieb:\nIn zwei Jahren bin ich mit der Schule fertig und überlege schon, nach welchen Kriterien ich meinen späteren Beruf auswählen soll. Vielleicht bin ich eine große Idealistin, aber ich finde, dass weder der Verdienst noch die Aussichten auf Karriere das Wichtigste sind. Ich meine, der Beruf muss in erster Linie Spaß machen und zu einem passen. Was meinen die anderen?", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Noch keine Antwort zum Sprachkurs in London", context: "Herr Kirchner, Vater von Bettina, einer guten Freundin von dir, hat dir vorgeschlagen, im kommenden Sommer zusammen mit Bettina einen Englisch-Sprachkurs in London zu besuchen, und um baldige Antwort per E-Mail gebeten. Aus einem wichtigen Grund hast du Herrn Kirchner noch nicht geschrieben.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du ihm noch nicht geantwortet hast."] }
+      ]}
+    },
+    s7: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Karsten liegt im Krankenhaus", context: "Dein Klassenkamerad Karsten liegt seit drei Tagen im Krankenhaus. Schreibe einem Freund / einer Freundin, der/die mit Karsten ebenfalls befreundet ist, eine E-Mail.", points: [
+          "Begründe: Warum liegt Karsten im Krankenhaus?",
+          "Schlag deinem Freund / deiner Freundin vor, Karsten gemeinsam zu besuchen.",
+          "Beschreibe: Wann könnt ihr Karsten besuchen, wie kommt ihr zum Krankenhaus und was könntet ihr ihm mitbringen?"
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Second-Hand statt Markenkleidung", context: "In einem Blog mit Tipps für junge Leute liest du den folgenden Beitrag:\n\n18.01. - 20:32 Uhr / Florian schrieb:\nWenn man modisch gekleidet ist, sieht man sicher gut aus, aber Markenkleidung ist teuer und jede Mode dauert nur ein paar Monate. Schöne Kleider kann man auch in einem Second-Hand-Laden finden oder auf dem Flohmarkt. Diese Sachen sind nicht nur billiger, sondern manchmal auch von sehr guter Qualität. Denkt doch mal darüber nach!", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Zahnarzttermin absagen", context: "Du hast übermorgen einen Termin bei deiner Zahnärztin, Frau Doktor Gruber. Aus einem wichtigen Grund kannst du aber diesen Termin nicht einhalten.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du übermorgen nicht in ihre Praxis kommen kannst."] }
+      ]}
+    },
+    s8: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Umzug vom Land in die Großstadt", context: "Auf dem Land geboren und an einem kleinen Ort aufgewachsen, bist du nun vor einigen Monaten mit deinen Eltern in eine Großstadt umgezogen. Heute schreibst du deinem besten Freund / deiner besten Freundin, der/die noch auf dem Land wohnt, um vom Umzug zu berichten.", points: [
+          "Beschreibe: Wie sieht das Leben in der Großstadt im Vergleich zum Leben auf dem Land aus?",
+          "Begründe: Aus welchem Grund musstest du mit deiner Familie umziehen?",
+          "Schlag deinem Freund / deiner Freundin vor, dich bei der nächsten Gelegenheit zu besuchen."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Frisch vom Wochenmarkt", context: "In einem Forum für gesunde Ernährung hast du den folgenden Beitrag gelesen:\n\n28.02. - 11:22 Uhr / Inge schrieb:\nWer sich gesund ernähren will, weiß, dass der Wochenmarkt eine sichere Adresse ist. Dort findet man jede Woche frische Sachen, kauft direkt beim Bauern oder Produzenten ein und zahlt auch weniger. Im Supermarkt sind die Sachen nicht so frisch und wesentlich teurer. Vergleicht doch mal Preise und Qualität!", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Absage für die Jubiläumsfeier", context: "Frau Ebert, eine nette Kollegin in der Firma, wo du seit zwei Monaten ein Praktikum machst, feiert am kommenden Freitag ihr 20-jähriges Arbeitsjubiläum und hat dich zur Feier eingeladen. Aus einem wichtigen Grund kannst du jedoch nicht anwesend sein.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du auf der Jubiläumsfeier fehlen wirst."] }
+      ]}
+    },
+    s9: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Der verwilderte Garten hinter dem Haus", context: "Hinter dem Haus, wo du seit ein paar Monaten mit deiner Familie wohnst, ist ein großer Garten, der aber ungepflegt ist und verlassen wirkt. Das möchtest du in Zusammenarbeit mit deinem Vater ändern. Heute schreibst du deinem Freund / deiner Freundin, um ihn/sie über euren Plan zu informieren.", points: [
+          "Beschreibe: Wie soll der Garten in einem Jahr aussehen? Was ist zu tun?",
+          "Begründe: Aus welchem Grund ist die Arbeit im Garten eine gute Freizeitbeschäftigung?",
+          "Schlag deinem Freund / deiner Freundin vor, dich demnächst zu besuchen und dir und deinem Vater bei den Gartenarbeiten zu helfen."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Haustiere für jedes Alter", context: "In einem Blog für Haustier-Freunde liest du den folgenden Beitrag:\n\nwww.haustier-spass-fuer-jung-und-alt.de / Meinungen\n20.04. - 18:43 Uhr / Herbert schrieb:\nEin Haustier zu halten und zu pflegen ist gar nicht so teuer oder schwer. Und Haustiere, besonders Hunde, sind wirklich für jedes Alter geeignet. Ich habe Videos gesehen, wo Babys mit einem großen Hund im Bettchen liegen, aber auch für ältere Menschen sind Haustiere das beste Mittel gegen Einsamkeit und Depression.", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Radtour mit der Nachbarin absagen", context: "Du hattest Frau Kramer, eurer netten Nachbarin, versprochen, sie am kommenden Sonntag auf einer Radtour durch den nahe gelegenen Wald zu begleiten. Aus einem wichtigen Grund wird dies jedoch nicht möglich sein.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du dein Versprechen nicht einhalten kannst."] }
+      ]}
+    },
+    s10: {
+      teil1: { label: "Teil 1", target: 80, defaultTime: 1200, items: [
+        { title: "Neu im Sportclub „Borussia“", context: "Seit drei Monaten bist du Mitglied im Sportclub „Borussia“, wo man Fußball, Basketball, Volleyball oder Handball spielen kann, und diese Freizeitaktivität gefällt dir sehr. Heute schreibst du deinem Freund / deiner Freundin, um davon zu erzählen.", points: [
+          "Begründe: Aus welchem Grund hast du dich im Sportclub angemeldet?",
+          "Beschreibe: An welchen Aktivitäten und wie oft nimmst du teil?",
+          "Schlag deinem Freund / deiner Freundin vor, dich einmal zu begleiten, um zu sehen, ob es ihm/ihr auch gut gefällt."
+        ] }
+      ]},
+      teil2: { label: "Teil 2", target: 80, defaultTime: 1500, items: [
+        { title: "Frühstück nicht vergessen", context: "In einem Schüler-Blog liest du den folgenden Beitrag:\n\n20.12. - 15:06 Uhr / Gertrud schrieb:\nIch stelle immer wieder fest, dass viele meiner Schulkameradinnen zur Schule kommen, ohne zu Hause richtig gefrühstückt zu haben. Das ist ein großer Fehler! Ein gutes Frühstück hilft dabei, sich zu konzentrieren und gibt Kraft, um die vielen Unterrichtsstunden problemlos zu überstehen. Sprecht doch mal mit Mama und Papa!", points: ["Schreibe deine Meinung zum Thema (circa 80 Wörter)."] }
+      ]},
+      teil3: { label: "Teil 3", target: 40, defaultTime: 900, items: [
+        { title: "Der Ausflug der Umwelt-AG fällt für dich aus", context: "Morgen findet der Ausflug der Umwelt-AG deiner Schule in ein nahes Naturschutzgebiet statt. Als Mitglied der Umwelt-AG hattest du natürlich vor mitzufahren. Aus einem wichtigen Grund geht dies jedoch nicht. Schreibe an Herrn Rot, der die Umwelt-AG leitet.", points: ["Entschuldige dich höflich.", "Erkläre, aus welchem Grund du nicht mitfahren kannst."] }
+      ]}
+    }
+  };
+
+  const ARENA_META = {
+    s1: { code: "1", name: "Modelltest 1" },
+    s2: { code: "2", name: "Modelltest 2" },
+    s3: { code: "3", name: "Modelltest 3" },
+    s4: { code: "4", name: "Modelltest 4" },
+    s5: { code: "5", name: "Modelltest 5" },
+    s6: { code: "6", name: "Modelltest 6" },
+    s7: { code: "7", name: "Modelltest 7" },
+    s8: { code: "8", name: "Modelltest 8" },
+    s9: { code: "9", name: "Modelltest 9" },
+    s10: { code: "10", name: "Modelltest 10" }
+  };
+
   /* ================= SO'Z BOYLIGI (VOCAB) ================= */
   const VOCAB = {
     teil1: [
@@ -1385,40 +1564,71 @@
   const levelHeaderText = document.getElementById('levelHeaderText');
   const levelBadgeCode = document.getElementById('levelBadgeCode');
   const introNote = document.getElementById('introNote');
+  const arenaBtn = document.getElementById('arenaBtn');
+  const arenaBadgeSub = document.getElementById('arenaBadgeSub');
+  const arenaPopoverOverlay = document.getElementById('arenaPopoverOverlay');
+  const arenaPopoverGrid = document.getElementById('arenaPopoverGrid');
+  const arenaPopoverCloseBtn = document.getElementById('arenaPopoverCloseBtn');
 
   /* ================= LEVEL (DARAJA) ================= */
-  function applyLevel(levelKey, opts){
-    opts = opts || {};
-    currentLevel = levelKey;
-    TASKS = LEVELS[currentLevel];
-    currentCategory = "teil1";
-    const meta = LEVEL_META[currentLevel];
-    levelHeaderText.textContent = 'Niveau ' + meta.code;
-    levelBadgeCode.textContent = meta.code;
-    introNote.innerHTML = `Bu vosita nemis tili <b>${meta.code} darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.`;
-    try{ localStorage.setItem(LEVEL_KEY, currentLevel); }catch(e){}
-    if(!opts.skipRender){
-      renderTabs();
-      pickTask(true);
-      vocabPanel.style.display = 'none';
-      samplePanel.style.display = 'none';
-      feedbackPanel.style.display = 'none';
-      konnektDropdown.style.display = 'none';
-      konnektBtn.classList.remove('active');
-    }
+  let inArena = false;
+  let currentArenaSection = null;
+
+  function closeSidePanels(){
+    vocabPanel.style.display = 'none';
+    samplePanel.style.display = 'none';
+    feedbackPanel.style.display = 'none';
+    konnektDropdown.style.display = 'none';
+    konnektBtn.classList.remove('active');
   }
-  function buildLevelGrid(container, onSelect){
-    container.innerHTML = Object.keys(LEVEL_META).map(key=>{
-      const m = LEVEL_META[key];
-      const sel = key === currentLevel ? ' selected' : '';
-      return `<button type="button" class="level-option${sel}" data-level="${key}">
+
+  /* Generic option-grid builder, reused for both the level picker and the ARENA section picker. */
+  function buildOptionGrid(container, metaMap, currentKey, onSelect){
+    container.innerHTML = Object.keys(metaMap).map(key=>{
+      const m = metaMap[key];
+      const sel = key === currentKey ? ' selected' : '';
+      return `<button type="button" class="level-option${sel}" data-key="${key}">
         <div class="code">${m.code}</div>
         <div class="name">${m.name}</div>
       </button>`;
     }).join('');
     container.querySelectorAll('.level-option').forEach(btn=>{
-      btn.addEventListener('click', ()=> onSelect(btn.dataset.level));
+      btn.addEventListener('click', ()=> onSelect(btn.dataset.key));
     });
+  }
+  function buildLevelGrid(container, onSelect){
+    buildOptionGrid(container, LEVEL_META, currentLevel, onSelect);
+  }
+
+  /* ARENA faqat B1 darajasida ko'rinadi. */
+  function updateArenaVisibility(){
+    if(currentLevel === 'b1'){
+      arenaBtn.style.display = '';
+    } else {
+      arenaBtn.style.display = 'none';
+      arenaPopoverOverlay.classList.remove('open');
+    }
+  }
+
+  function applyLevel(levelKey, opts){
+    opts = opts || {};
+    currentLevel = levelKey;
+    TASKS = LEVELS[currentLevel];
+    currentCategory = "teil1";
+    /* B1 dan boshqa darajaga o'tilganda (yoki B1 ichida qayta tanlanganda) ARENA rejimi yopiladi. */
+    inArena = false;
+    currentArenaSection = null;
+    const meta = LEVEL_META[currentLevel];
+    levelHeaderText.textContent = 'Niveau ' + meta.code;
+    levelBadgeCode.textContent = meta.code;
+    introNote.innerHTML = `Bu vosita nemis tili <b>${meta.code} darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.`;
+    updateArenaVisibility();
+    try{ localStorage.setItem(LEVEL_KEY, currentLevel); }catch(e){}
+    if(!opts.skipRender){
+      renderTabs();
+      pickTask(true);
+      closeSidePanels();
+    }
   }
   function openLevelModal(){
     buildLevelGrid(levelModalGrid, (key)=>{
@@ -1437,6 +1647,32 @@
   levelSwitchBtn.addEventListener('click', openLevelPopover);
   levelPopoverCloseBtn.addEventListener('click', ()=> levelPopoverOverlay.classList.remove('open'));
   levelPopoverOverlay.addEventListener('click', (e)=>{ if(e.target === levelPopoverOverlay) levelPopoverOverlay.classList.remove('open'); });
+
+  /* ================= ARENA (faqat B1) ================= */
+  function applyArenaSection(sectionKey){
+    if(currentLevel !== 'b1') return; // ARENA faqat B1 darajasida ruxsat etiladi
+    inArena = true;
+    currentArenaSection = sectionKey;
+    TASKS = ARENA_SECTIONS[sectionKey];
+    currentCategory = Object.keys(TASKS)[0];
+    const meta = ARENA_META[sectionKey];
+    arenaBadgeSub.textContent = "BO'LIM " + meta.code;
+    introNote.innerHTML = `Bu vosita <b>ARENA — ${meta.name}</b> mavzulari (Schreiben) bo'yicha mashq qilish uchun. Pastda Teil (qism) tanlang, taymerni ishga tushiring va yozishni boshlang.`;
+    renderTabs();
+    pickTask(true);
+    closeSidePanels();
+  }
+  function openArenaPopover(){
+    if(currentLevel !== 'b1') return;
+    buildOptionGrid(arenaPopoverGrid, ARENA_META, currentArenaSection, (key)=>{
+      applyArenaSection(key);
+      arenaPopoverOverlay.classList.remove('open');
+    });
+    arenaPopoverOverlay.classList.add('open');
+  }
+  arenaBtn.addEventListener('click', openArenaPopover);
+  arenaPopoverCloseBtn.addEventListener('click', ()=> arenaPopoverOverlay.classList.remove('open'));
+  arenaPopoverOverlay.addEventListener('click', (e)=>{ if(e.target === arenaPopoverOverlay) arenaPopoverOverlay.classList.remove('open'); });
 
   /* ================= TABS ================= */
   function renderTabs(){
