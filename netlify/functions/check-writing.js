@@ -35,23 +35,33 @@ exports.handler = async function (event) {
   }
 
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        max_tokens: 1000,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ]
-      })
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+
+    let response;
+    try {
+      response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          max_tokens: 3000,
+          temperature: 0.4,
+          reasoning_effort: "low",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ]
+        })
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errText = await response.text();
@@ -59,9 +69,29 @@ exports.handler = async function (event) {
     }
 
     const data = await response.json();
+    const finishReason = data.choices?.[0]?.finish_reason;
     const textBlock = data.choices?.[0]?.message?.content || "";
-    const cleaned = textBlock.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    let cleaned = textBlock.replace(/```json|```/g, "").trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      // Ba'zan model JSON atrofiga qo'shimcha matn qo'shib yuboradi — birinchi { dan oxirgi } gacha bo'lgan qismni ajratib olishga urinamiz.
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        try {
+          parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+        } catch (secondErr) {
+          const reason = finishReason === "length" ? " (javob uzunlik chegarasida kesilib qolgan)" : "";
+          return { statusCode: 500, body: JSON.stringify({ error: `AI javobini o'qib bo'lmadi${reason}. Qayta urinib ko'ring.` }) };
+        }
+      } else {
+        const reason = finishReason === "length" ? " (javob uzunlik chegarasida kesilib qolgan)" : "";
+        return { statusCode: 500, body: JSON.stringify({ error: `AI javobini o'qib bo'lmadi${reason}. Qayta urinib ko'ring.` }) };
+      }
+    }
 
     return {
       statusCode: 200,
@@ -69,6 +99,7 @@ exports.handler = async function (event) {
       body: JSON.stringify(parsed)
     };
   } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: err.message || "Server xatosi" }) };
+    const message = err.name === "AbortError" ? "AI javob berishga ulgurmadi (vaqt tugadi). Qayta urinib ko'ring." : (err.message || "Server xatosi");
+    return { statusCode: 500, body: JSON.stringify({ error: message }) };
   }
 };

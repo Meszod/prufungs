@@ -560,8 +560,8 @@
 
         <div class="actions-row">
           <button class="btn primary" id="finishBtn">Yakunlash</button>
-          <button class="btn" id="checkBtn">AI bilan tekshirish</button>
-          <button class="btn" id="sampleBtn">Namuna javob</button>
+          <button class="btn" id="checkBtn" disabled title="Avval 'Yakunlash' tugmasini bosing">AI bilan tekshirish</button>
+          <button class="btn" id="sampleBtn" disabled title="Avval 'Yakunlash' tugmasini bosing">Namuna javob</button>
           <button class="btn" id="downloadBtn">Matnni yuklab olish (.txt)</button>
           <button class="btn" id="clearBtn">Tozalash</button>
         </div>
@@ -1738,6 +1738,7 @@
     }
     updateTargetHint();
     saveDraft();
+    lockFinishGatedButtons();
   }
 
   function renderTaskCard(){
@@ -1877,6 +1878,21 @@
   });
 
   /* ================= FINISH / DOWNLOAD / CLEAR ================= */
+  let hasFinished = false;
+  function lockFinishGatedButtons(){
+    hasFinished = false;
+    checkBtn.disabled = true;
+    checkBtn.title = "Avval 'Yakunlash' tugmasini bosing";
+    sampleBtn.disabled = true;
+    sampleBtn.title = "Avval 'Yakunlash' tugmasini bosing";
+  }
+  function unlockFinishGatedButtons(){
+    hasFinished = true;
+    checkBtn.disabled = false;
+    checkBtn.title = '';
+    sampleBtn.disabled = false;
+    sampleBtn.title = '';
+  }
   function showFinishStamp(labelTop){
     const words = writingArea.value.trim().length ? writingArea.value.trim().split(/\s+/).filter(Boolean).length : 0;
     finishStamp.querySelector('span:first-child').textContent = labelTop || 'FERTIG';
@@ -1886,6 +1902,7 @@
   }
   finishBtn.addEventListener('click', ()=>{
     pauseTimer();
+    unlockFinishGatedButtons();
     showFinishStamp('FERTIG');
   });
   downloadBtn.addEventListener('click', ()=>{
@@ -2023,6 +2040,11 @@
   }
 
   async function checkWithAI(){
+    if(!hasFinished){
+      feedbackPanel.style.display = 'block';
+      feedbackPanel.innerHTML = `<div class="fb-error">Avval "Yakunlash" tugmasini bosing.</div>`;
+      return;
+    }
     const text = writingArea.value.trim();
     if(!text){
       feedbackPanel.style.display = 'block';
@@ -2036,16 +2058,21 @@
     const cat = TASKS[currentCategory];
     const pointsList = currentTask.points.map((p,i)=>`${i+1}. ${p}`).join('\n');
 
-    const systemPrompt = `Du bist ein erfahrener Prüfer für die deutsche B1-Schreibprüfung. Du bewertest den Text eines Deutschlerners (Muttersprache Usbekisch) nach B1-Kriterien: Erfüllung der Leitpunkte, Textaufbau, Wortschatz, Grammatik.
-Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt, ohne Markdown-Codeblock, ohne einleitenden Text, exakt in diesem Format:
+    const systemPrompt = `Sen tajribali, talabchan lekin adolatli nemis tili o'qituvchisisan va B1 darajasidagi Schreiben (yozma) imtihonini tekshirasan. O'quvchining ona tili — o'zbek tili.
+Matnni JUMLA-JUMLA tahlil qil va xuddi qog'ozga qizil qalam bilan belgilaydigan qattiqqo'l o'qituvchidek ISHLA: grammatika (kelishik/Kasus, artikl, fe'l tuslanishi, so'z tartibi/Wortstellung, predlog+kelishik moslashuvi), imlo va so'z tanlovidagi HAR BIR sezilarli xatoni top — faqat eng oddiylarini emas.
+Javobni FAQAT quyidagi formatdagi valid JSON obyekt sifatida ber, markdown kod bloksiz, hech qanday kirish so'zisiz:
 {
-  "score": <Zahl 0-100>,
-  "summary": "<2-3 Sätze allgemeines Feedback, auf Usbekisch geschrieben>",
-  "leitpunkte": [{"point": "<Leitpunkt auf Deutsch>", "covered": <true/false>}],
-  "issues": [{"wrong": "<falsches Beispiel aus dem Text>", "right": "<korrigierte Version>", "note": "<kurze Erklärung auf Usbekisch>"}],
-  "suggestion": "<1-2 Sätze konkreter Tipp für die nächste Übung, auf Usbekisch>"
+  "score": <0-100 oralig'idagi son>,
+  "summary": "<2-3 gaplik umumiy fikr, o'zbek tilida>",
+  "leitpunkte": [{"point": "<Leitpunkt nemis tilida>", "covered": <true/false>}],
+  "issues": [{"wrong": "<o'quvchi matnidan olingan aniq, so'zma-so'z noto'g'ri parcha>", "right": "<to'g'irlangan versiya>", "note": "<qaysi grammatika qoidasi buzilgani, aniq va qisqa, o'zbek tilida — masalan: 'Akkusativ artikl xato (den o'rniga der)', 'Fe'l ikkinchi o'rinda kelishi kerak (so'z tartibi xatosi)', 'Bu predlog Dativ talab qiladi'>"}],
+  "suggestion": "<1-2 gaplik keyingi mashq uchun aniq va amaliy tavsiya, o'zbek tilida>"
 }
-Gib maximal 6 issues an, die wichtigsten zuerst. Wenn der Text die Leitpunkte aus der Aufgabe nicht abdeckt, setze covered auf false. Sei ehrlich aber konstruktiv.`;
+Qoidalar:
+- "wrong" maydoni albatta o'quvchi matnidan olingan HAQIQIY parcha bo'lsin, o'zing to'qib chiqarma.
+- Matnda haqiqatan mavjud bo'lgan xatolarning aksariyatini toping (kamida bo'lsa ham eng muhimlarini), lekin 10 tadan oshirmang — eng muhim xatolardan boshlab tartibla.
+- Agar matn juda toza bo'lsa, "issues" bo'sh massiv qoldirilsin va buni "summary"da ijobiy ta'kidla.
+- Ohang: halol lekin konstruktiv va rag'batlantiruvchi — bu til o'rganuvchisi, uni tanqid qilish emas, o'rgatish maqsadida tushuntir.`;
 
     const userPrompt = `Aufgabe (${cat.label}): ${currentTask.title}
 Kontext: ${currentTask.context}
@@ -2057,7 +2084,7 @@ Text des Lerners:
 ${text}
 """`;
 
-    try{
+    async function callAI(){
       const response = await fetch("/.netlify/functions/check-writing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2068,6 +2095,17 @@ ${text}
       });
       const parsed = await response.json();
       if(parsed.error){ throw new Error(parsed.error); }
+      return parsed;
+    }
+
+    try{
+      let parsed;
+      try{
+        parsed = await callAI();
+      }catch(firstErr){
+        // Vaqtinchalik xato (masalan javob kesilib qolgan/JSON buzilgan) bo'lsa, bir marta qayta urinamiz
+        parsed = await callAI();
+      }
       renderFeedback(parsed);
       if(typeof parsed.score === 'number'){
         addHistoryEntry({
@@ -2162,6 +2200,11 @@ ${text}
 
   /* ================= NAMUNA JAVOB (MUSTERLÖSUNG) ================= */
   async function generateSample(){
+    if(!hasFinished){
+      samplePanel.style.display = 'block';
+      samplePanel.innerHTML = `<div class="fb-error">Avval "Yakunlash" tugmasini bosing.</div>`;
+      return;
+    }
     const isOpen = samplePanel.style.display === 'block';
     if(isOpen){
       samplePanel.style.display = 'none';
