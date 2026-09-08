@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prufungs — Admin panel</title>
+<style>
+  :root{
+    --bg:#f4f1ea; --ink:#1c1a16; --ink-soft:#5c574c; --line:#d8d2c3; --accent:#1f5c4a; --danger:#b0402f;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap{ max-width:760px; margin:0 auto; padding:32px 20px 80px; }
+  h1{ font-size:22px; margin:0 0 6px; }
+  .sub{ color:var(--ink-soft); font-size:13px; margin:0 0 28px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:8px; padding:20px; margin-bottom:20px; }
+  .card h2{ font-size:15px; margin:0 0 14px; }
+  input, select{ width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--line); border-radius:5px; font-size:14px; font-family:inherit; margin-bottom:10px; }
+  button{ cursor:pointer; border:none; border-radius:5px; padding:10px 16px; font-size:13.5px; font-weight:600; font-family:inherit; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-danger{ background:var(--danger); color:#fff; }
+  .btn-ghost{ background:transparent; border:1.5px solid var(--line); color:var(--ink); }
+  .row{ display:flex; gap:8px; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); }
+  .row:last-child{ border-bottom:none; }
+  .row-name{ font-weight:600; font-size:14px; }
+  .row-meta{ font-size:12px; color:var(--ink-soft); }
+  .row-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .row-actions button{ padding:6px 10px; font-size:12px; }
+  .empty{ color:var(--ink-soft); font-size:13px; padding:8px 0; }
+  #loginScreen{ max-width:340px; margin:80px auto; }
+  #appScreen{ display:none; }
+  .key-badge{ font-family:monospace; background:#f0ece1; padding:2px 6px; border-radius:3px; font-size:11px; }
+  .err{ color:var(--danger); font-size:13px; margin-top:8px; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="loginScreen">
+  <h1>Admin panel</h1>
+  <p class="sub">Prufungs — Schreiben trainer boshqaruvi</p>
+  <div class="card">
+    <input type="password" id="passwordInput" placeholder="Admin parol">
+    <button class="btn-primary" id="loginBtn" style="width:100%;">Kirish</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appScreen">
+  <h1>Admin panel</h1>
+  <p class="sub" id="statsLine"></p>
+
+  <div class="card">
+    <h2>Yangi ustoz qo'shish</h2>
+    <p class="sub" style="margin:0 0 12px;">Ustoz avval botga <b>/start</b> bosishi kerak — shundan keyin u pastdagi "Kutilayotganlar" ro'yxatida chiqadi.</p>
+    <select id="candidateSelect"></select>
+    <input type="text" id="displayNameInput" placeholder="Ism Familya (o'quvchilarga shu nom ko'rinadi)">
+    <button class="btn-primary" id="addTeacherBtn">Ustoz qilib qo'shish</button>
+    <div class="err" id="addErr"></div>
+  </div>
+
+  <div class="card">
+    <h2>Ustozlar</h2>
+    <div id="teachersList"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kutilayotganlar (botga /start bosgan, hali ustoz emas)</h2>
+    <div id="candidatesList"></div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = ''; // shu server o'zida
+  let PASSWORD = sessionStorage.getItem('adminPassword') || '';
+
+  function authHeaders(){
+    return { 'Content-Type': 'application/json', 'X-Admin-Password': PASSWORD };
+  }
+
+  async function login(pass){
+    PASSWORD = pass;
+    const res = await fetch(API_BASE + '/api/admin/overview', { headers: authHeaders() });
+    if(res.status === 401){ throw new Error('Parol xato'); }
+    if(!res.ok){ throw new Error('Server xatosi'); }
+    sessionStorage.setItem('adminPassword', PASSWORD);
+    return res.json();
+  }
+
+  function showApp(){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+  }
+
+  async function loadOverview(){
+    const res = await fetch(API_BASE + '/api/admin/overview', { headers: authHeaders() });
+    if(!res.ok) throw new Error('Yuklashda xato');
+    const data = await res.json();
+    render(data);
+  }
+
+  function render(data){
+    document.getElementById('statsLine').textContent =
+      `${data.teachers.length} ta ustoz · ${data.candidates.length} ta kutilayotgan · ${data.submissionsCount} ta yuborilgan ish`;
+
+    const candSelect = document.getElementById('candidateSelect');
+    candSelect.innerHTML = data.candidates.length
+      ? data.candidates.map(c => `<option value="${c.telegram_id}">${c.first_name || '(nomsiz)'} (@${c.username || '-'}) — ID: ${c.telegram_id}</option>`).join('')
+      : `<option value="">Hozircha kutilayotganlar yo'q</option>`;
+
+    const teachersList = document.getElementById('teachersList');
+    teachersList.innerHTML = data.teachers.length ? '' : `<div class="empty">Hozircha ustozlar yo'q.</div>`;
+    data.teachers.forEach(t=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <div>
+          <div class="row-name">${t.display_name || '(nomsiz)'}</div>
+          <div class="row-meta">@${t.username || '-'} · ID: ${t.telegram_id} · kalit: <span class="key-badge">${t.teacher_key}</span></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn-ghost" data-edit="${t.telegram_id}" data-name="${(t.display_name||'').replace(/"/g,'&quot;')}">Tahrirlash</button>
+          <button class="btn-danger" data-remove="${t.telegram_id}">Olib tashlash</button>
+        </div>`;
+      teachersList.appendChild(row);
+    });
+
+    const candidatesList = document.getElementById('candidatesList');
+    candidatesList.innerHTML = data.candidates.length ? '' : `<div class="empty">Hozircha kutilayotganlar yo'q.</div>`;
+    data.candidates.forEach(c=>{
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <div>
+          <div class="row-name">${c.first_name || '(nomsiz)'}</div>
+          <div class="row-meta">@${c.username || '-'} · ID: ${c.telegram_id}</div>
+        </div>`;
+      candidatesList.appendChild(row);
+    });
+
+    teachersList.querySelectorAll('[data-remove]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        if(!confirm('Ustozni olib tashlaysizmi?')) return;
+        await fetch(API_BASE + '/api/admin/teachers/' + btn.dataset.remove, { method:'DELETE', headers: authHeaders() });
+        loadOverview();
+      });
+    });
+    teachersList.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const newName = prompt('Yangi Ism Familya:', btn.dataset.name || '');
+        if(!newName) return;
+        await fetch(API_BASE + '/api/admin/teachers/' + btn.dataset.edit, {
+          method:'PATCH', headers: authHeaders(), body: JSON.stringify({ displayName: newName })
+        });
+        loadOverview();
+      });
+    });
+  }
+
+  document.getElementById('loginBtn').addEventListener('click', async ()=>{
+    const pass = document.getElementById('passwordInput').value.trim();
+    if(!pass) return;
+    try{
+      const data = await login(pass);
+      showApp();
+      render(data);
+    }catch(e){
+      document.getElementById('loginErr').textContent = e.message;
+    }
+  });
+  document.getElementById('passwordInput').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') document.getElementById('loginBtn').click();
+  });
+
+  document.getElementById('addTeacherBtn').addEventListener('click', async ()=>{
+    const telegramId = document.getElementById('candidateSelect').value;
+    const displayName = document.getElementById('displayNameInput').value.trim();
+    const errEl = document.getElementById('addErr');
+    errEl.textContent = '';
+    if(!telegramId){ errEl.textContent = "Kutilayotganlar ro'yxati bo'sh."; return; }
+    if(!displayName){ errEl.textContent = 'Ism Familyani kiriting.'; return; }
+    const res = await fetch(API_BASE + '/api/admin/teachers', {
+      method:'POST', headers: authHeaders(), body: JSON.stringify({ telegramId, displayName })
+    });
+    if(!res.ok){ errEl.textContent = 'Xatolik yuz berdi.'; return; }
+    document.getElementById('displayNameInput').value = '';
+    loadOverview();
+  });
+
+  // Agar parol sessionStorage'da saqlangan bo'lsa, avtomatik kirish
+  if(PASSWORD){
+    login(PASSWORD).then(data=>{ showApp(); render(data); }).catch(()=>{ sessionStorage.removeItem('adminPassword'); });
+  }
+</script>
+</body>
+</html>

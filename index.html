@@ -617,6 +617,9 @@
     <div class="level-popover-title">Ism Familyangizni kiriting</div>
     <p class="level-modal-sub" style="margin-bottom:14px;">Natijangiz ustozga shu ism bilan yuboriladi.</p>
     <input type="text" id="nameGateInput" placeholder="Ism Familya" style="width:100%; box-sizing:border-box; padding:11px 12px; border:1.5px solid var(--paper-line); border-radius:2px; font-family:inherit; font-size:14px; margin-bottom:12px;">
+    <select id="nameGateTeacherSelect" style="width:100%; box-sizing:border-box; padding:11px 12px; border:1.5px solid var(--paper-line); border-radius:2px; font-family:inherit; font-size:14px; margin-bottom:12px;">
+      <option value="">Ustozlar yuklanmoqda...</option>
+    </select>
     <button class="btn primary" id="nameGateSubmitBtn" style="width:100%;">Davom etish</button>
   </div>
 </div>
@@ -2451,12 +2454,15 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     tgGateOverlay.classList.add('open');
   }
 
-  /* ================= ISM FAMILYA + USTOZGA YUBORISH =================
-     Yozuv AI tomonidan tekshirilgach, natija (ism, mavzu, matn, ball, izoh) ustozlarga
-     Telegram bot orqali yuboriladi. Ism bir marta so'raladi va localStorage'da saqlanadi. */
+  /* ================= ISM FAMILYA + USTOZ TANLASH + YUBORISH =================
+     Yozuv AI tomonidan tekshirilgach, natija (ism, tanlangan ustoz, mavzu, matn, ball, izoh)
+     bot orqali TANLANGAN ustozga (+ har doim adminga) yuboriladi.
+     Ism va ustoz tanlovi bir marta so'raladi va localStorage'da saqlanadi. */
   const STUDENT_NAME_KEY = 'schreibenTrainer_student_name_v1';
+  const STUDENT_TEACHER_KEY = 'schreibenTrainer_student_teacher_v1';
   const nameGateOverlay = document.getElementById('nameGateOverlay');
   const nameGateInput = document.getElementById('nameGateInput');
+  const nameGateTeacherSelect = document.getElementById('nameGateTeacherSelect');
   const nameGateSubmitBtn = document.getElementById('nameGateSubmitBtn');
 
   function getStudentName(){
@@ -2465,19 +2471,57 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
   function setStudentName(name){
     try{ localStorage.setItem(STUDENT_NAME_KEY, name); }catch(e){}
   }
+  function getStudentTeacherKey(){
+    try{ return localStorage.getItem(STUDENT_TEACHER_KEY) || ''; }catch(e){ return ''; }
+  }
+  function setStudentTeacherKey(key){
+    try{ localStorage.setItem(STUDENT_TEACHER_KEY, key); }catch(e){}
+  }
+
+  let teachersListCache = null;
+  async function fetchTeachersList(){
+    if(teachersListCache) return teachersListCache;
+    try{
+      const res = await fetch(BOT_API_BASE + '/api/teachers/public');
+      const data = await res.json();
+      teachersListCache = Array.isArray(data.teachers) ? data.teachers : [];
+    }catch(e){
+      teachersListCache = [];
+    }
+    return teachersListCache;
+  }
+  function populateTeacherSelect(teachers, selectedKey){
+    if(teachers.length === 0){
+      nameGateTeacherSelect.innerHTML = `<option value="">Hozircha ustozlar yo'q — ishingiz to'g'ridan-to'g'ri adminga boradi</option>`;
+      return;
+    }
+    nameGateTeacherSelect.innerHTML =
+      `<option value="">— Ustozni tanlang —</option>` +
+      teachers.map(t => `<option value="${t.key}"${t.key === selectedKey ? ' selected' : ''}>${t.name}</option>`).join('');
+  }
+
   function askStudentName(){
     return new Promise((resolve)=>{
       nameGateInput.value = getStudentName();
+      const savedTeacherKey = getStudentTeacherKey();
+      fetchTeachersList().then(teachers => populateTeacherSelect(teachers, savedTeacherKey));
       nameGateOverlay.classList.add('open');
       setTimeout(()=> nameGateInput.focus(), 50);
       function onSubmit(){
         const name = nameGateInput.value.trim();
         if(!name) { nameGateInput.focus(); return; }
+        const teacherKey = nameGateTeacherSelect.value || '';
+        const teachersAvailable = teachersListCache && teachersListCache.length > 0;
+        if(teachersAvailable && !teacherKey){
+          nameGateTeacherSelect.focus();
+          return;
+        }
         setStudentName(name);
+        setStudentTeacherKey(teacherKey);
         nameGateOverlay.classList.remove('open');
         nameGateSubmitBtn.removeEventListener('click', onSubmit);
         nameGateInput.removeEventListener('keydown', onKeydown);
-        resolve(name);
+        resolve({ name, teacherKey });
       }
       function onKeydown(e){ if(e.key === 'Enter') onSubmit(); }
       nameGateSubmitBtn.addEventListener('click', onSubmit);
@@ -2492,13 +2536,19 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
 
   async function sendSubmissionToTeacher(parsed, text){
     let name = getStudentName();
-    if(!name){
-      name = await askStudentName();
+    let teacherKey = getStudentTeacherKey();
+    const teachers = await fetchTeachersList();
+    const needsPrompt = !name || (teachers.length > 0 && !teacherKey);
+    if(needsPrompt){
+      const result = await askStudentName();
+      name = result.name;
+      teacherKey = result.teacherKey;
     }
     const cat = TASKS[currentCategory];
     const feedbackText = [parsed.summary || '', issuesToText(parsed.issues)].filter(Boolean).join('\n\n');
     const payload = {
       studentName: name,
+      teacherKey: teacherKey || '',
       level: inArena ? ('ARENA/' + (ARENA_META[currentArenaSection] ? ARENA_META[currentArenaSection].name : currentArenaSection)) : currentLevel,
       category: cat ? cat.label : currentCategory,
       taskTitle: currentTask ? currentTask.title : '',
