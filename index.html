@@ -581,9 +581,10 @@
   <div class="level-modal">
     <div class="level-modal-title">Davom etishdan oldin obuna bo'ling</div>
     <p class="level-modal-sub">Ushbu Schreiben mashq vositasidan foydalanish uchun avval bizning Telegram kanalimizga obuna bo'lishingiz kerak.</p>
-    <a class="btn primary" id="tgGateJoinBtn" href="https://t.me/+erL7nsZWemExNDUy" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-bottom:10px;">📢 Kanalga obuna bo'lish</a>
+    <a class="btn primary" id="tgGateJoinBtn" href="https://t.me/+erL7nsZWemExNDUy" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-bottom:10px;">📢 1. Kanalga obuna bo'lish</a>
     <a href="https://t.me/bedeutungslosM" target="_blank" rel="noopener" style="display:block; text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:16px;">@bedeutungslosM — kanalni ko'rish</a>
-    <button class="btn" id="tgGateConfirmBtn" style="width:100%;">✅ Obuna bo'ldim, davom etish</button>
+    <button class="btn primary" id="tgGateVerifyBtn" style="width:100%; margin-bottom:8px;">✅ 2. Tekshirish</button>
+    <p id="tgGateStatus" style="font-size:12px; color:var(--ink-soft); text-align:center; min-height:16px; margin:0;"></p>
   </div>
 </div>
 
@@ -608,6 +609,15 @@
     <div class="level-popover-title">ARENA — bo'limni tanlang</div>
     <div class="level-modal-grid" id="arenaPopoverGrid"></div>
     <button class="btn" id="arenaPopoverCloseBtn" style="margin-top:10px; width:100%;">Bekor qilish</button>
+  </div>
+</div>
+
+<div class="level-popover-overlay" id="nameGateOverlay">
+  <div class="level-popover">
+    <div class="level-popover-title">Ism Familyangizni kiriting</div>
+    <p class="level-modal-sub" style="margin-bottom:14px;">Natijangiz ustozga shu ism bilan yuboriladi.</p>
+    <input type="text" id="nameGateInput" placeholder="Ism Familya" style="width:100%; box-sizing:border-box; padding:11px 12px; border:1.5px solid var(--paper-line); border-radius:2px; font-family:inherit; font-size:14px; margin-bottom:12px;">
+    <button class="btn primary" id="nameGateSubmitBtn" style="width:100%;">Davom etish</button>
   </div>
 </div>
 
@@ -2069,6 +2079,7 @@ ${text}
         });
         if(statsPanel.style.display !== 'none') renderStatsPanel();
       }
+      sendSubmissionToTeacher(parsed, text);
     }catch(err){
       feedbackPanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
       console.error("AI check error:", err);
@@ -2326,13 +2337,15 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     renderTimer();
   }
 
-  /* ================= TELEGRAM KANALGA OBUNA (GATE) =================
-     Sayt hech qanday backend orqali haqiqiy obunani tekshira olmaydi (bu statik sayt),
-     shuning uchun foydalanuvchi o'zi "Obuna bo'ldim" deb tasdiqlaydi. Tasdiq bir marta
-     localStorage'ga saqlanadi va keyingi tashriflarda gate qayta ko'rsatilmaydi. */
+  /* ================= TELEGRAM KANALGA OBUNA (GATE) — HAQIQIY TEKSHIRUV =================
+     Bot backend (Railway) orqali getChatMember bilan tekshiriladi.
+     Oqim: 1) sayt botdan sessionId + deep-link oladi -> 2) foydalanuvchi Telegram'da botga /start bosadi
+     -> bot getChatMember bilan tekshiradi -> 3) sayt statusni poll qiladi, "confirmed" bo'lganda gate yopiladi. */
+  const BOT_API_BASE = 'https://prufungs-bot-production.up.railway.app';
   const TG_SUB_KEY = 'schreibenTrainer_tg_subscribed_v1';
   const tgGateOverlay = document.getElementById('tgGateOverlay');
-  const tgGateConfirmBtn = document.getElementById('tgGateConfirmBtn');
+  const tgGateVerifyBtn = document.getElementById('tgGateVerifyBtn');
+  const tgGateStatus = document.getElementById('tgGateStatus');
 
   function isTgSubscribed(){
     try{ return localStorage.getItem(TG_SUB_KEY) === '1'; }catch(e){ return false; }
@@ -2341,15 +2354,125 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     try{ localStorage.setItem(TG_SUB_KEY, '1'); }catch(e){}
   }
 
+  let tgPollTimer = null;
+  function stopTgPolling(){
+    if(tgPollTimer){ clearInterval(tgPollTimer); tgPollTimer = null; }
+  }
+  async function startTgVerification(){
+    tgGateVerifyBtn.disabled = true;
+    tgGateStatus.textContent = 'Bot bilan bog\'lanilmoqda...';
+    try{
+      const startRes = await fetch(BOT_API_BASE + '/api/verify/start', { method: 'POST' });
+      const startData = await startRes.json();
+      if(!startData.sessionId){ throw new Error('sessionId olinmadi'); }
+      window.open(startData.deepLink, '_blank');
+      tgGateStatus.textContent = 'Telegram\'da botga o\'ting va /start bosing...';
+
+      let elapsed = 0;
+      tgPollTimer = setInterval(async ()=>{
+        elapsed += 2500;
+        try{
+          const statusRes = await fetch(BOT_API_BASE + '/api/verify/status/' + startData.sessionId);
+          const statusData = await statusRes.json();
+          if(statusData.status === 'confirmed'){
+            stopTgPolling();
+            tgGateStatus.textContent = '✅ Tasdiqlandi!';
+            markTgSubscribed();
+            setTimeout(()=>{
+              tgGateOverlay.classList.remove('open');
+              initApp();
+            }, 500);
+          } else if(statusData.status === 'expired'){
+            stopTgPolling();
+            tgGateStatus.textContent = 'Vaqt tugadi. Qayta urinib ko\'ring.';
+            tgGateVerifyBtn.disabled = false;
+          }
+        }catch(e){ /* vaqtinchalik tarmoq xatosi — keyingi urinishda davom etadi */ }
+
+        if(elapsed >= 120000){
+          stopTgPolling();
+          tgGateStatus.textContent = 'Hali tasdiqlanmadi. Botga /start bosganingizga ishonch hosil qiling va qayta urining.';
+          tgGateVerifyBtn.disabled = false;
+        }
+      }, 2500);
+    }catch(err){
+      tgGateStatus.textContent = 'Xatolik: bot bilan bog\'lanib bo\'lmadi. Birozdan so\'ng qayta urinib ko\'ring.';
+      tgGateVerifyBtn.disabled = false;
+    }
+  }
+  tgGateVerifyBtn.addEventListener('click', startTgVerification);
+
   if(isTgSubscribed()){
     initApp();
   } else {
     tgGateOverlay.classList.add('open');
-    tgGateConfirmBtn.addEventListener('click', ()=>{
-      markTgSubscribed();
-      tgGateOverlay.classList.remove('open');
-      initApp();
+  }
+
+  /* ================= ISM FAMILYA + USTOZGA YUBORISH =================
+     Yozuv AI tomonidan tekshirilgach, natija (ism, mavzu, matn, ball, izoh) ustozlarga
+     Telegram bot orqali yuboriladi. Ism bir marta so'raladi va localStorage'da saqlanadi. */
+  const STUDENT_NAME_KEY = 'schreibenTrainer_student_name_v1';
+  const nameGateOverlay = document.getElementById('nameGateOverlay');
+  const nameGateInput = document.getElementById('nameGateInput');
+  const nameGateSubmitBtn = document.getElementById('nameGateSubmitBtn');
+
+  function getStudentName(){
+    try{ return localStorage.getItem(STUDENT_NAME_KEY) || ''; }catch(e){ return ''; }
+  }
+  function setStudentName(name){
+    try{ localStorage.setItem(STUDENT_NAME_KEY, name); }catch(e){}
+  }
+  function askStudentName(){
+    return new Promise((resolve)=>{
+      nameGateInput.value = getStudentName();
+      nameGateOverlay.classList.add('open');
+      setTimeout(()=> nameGateInput.focus(), 50);
+      function onSubmit(){
+        const name = nameGateInput.value.trim();
+        if(!name) { nameGateInput.focus(); return; }
+        setStudentName(name);
+        nameGateOverlay.classList.remove('open');
+        nameGateSubmitBtn.removeEventListener('click', onSubmit);
+        nameGateInput.removeEventListener('keydown', onKeydown);
+        resolve(name);
+      }
+      function onKeydown(e){ if(e.key === 'Enter') onSubmit(); }
+      nameGateSubmitBtn.addEventListener('click', onSubmit);
+      nameGateInput.addEventListener('keydown', onKeydown);
     });
+  }
+
+  function issuesToText(issues){
+    if(!Array.isArray(issues) || issues.length === 0) return '';
+    return issues.map((it,i)=> `${i+1}. ❌ ${it.wrong || ''} → ✅ ${it.right || ''}${it.note ? ' (' + it.note + ')' : ''}`).join('\n');
+  }
+
+  async function sendSubmissionToTeacher(parsed, text){
+    let name = getStudentName();
+    if(!name){
+      name = await askStudentName();
+    }
+    const cat = TASKS[currentCategory];
+    const feedbackText = [parsed.summary || '', issuesToText(parsed.issues)].filter(Boolean).join('\n\n');
+    const payload = {
+      studentName: name,
+      level: inArena ? ('ARENA/' + (ARENA_META[currentArenaSection] ? ARENA_META[currentArenaSection].name : currentArenaSection)) : currentLevel,
+      category: cat ? cat.label : currentCategory,
+      taskTitle: currentTask ? currentTask.title : '',
+      text: text,
+      wordCount: (text.trim().split(/\s+/).filter(Boolean)).length,
+      aiScore: typeof parsed.score === 'number' ? parsed.score : '',
+      aiFeedback: feedbackText
+    };
+    try{
+      await fetch(BOT_API_BASE + '/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }catch(e){
+      console.error('Ustozga yuborishda xatolik:', e);
+    }
   }
 
 })();
