@@ -577,6 +577,16 @@
 
 <div class="finish-stamp" id="finishStamp"><span>FERTIG</span><span id="finishSub">0 Wörter</span></div>
 
+<div class="level-modal-overlay" id="tgGateOverlay">
+  <div class="level-modal">
+    <div class="level-modal-title">Davom etishdan oldin obuna bo'ling</div>
+    <p class="level-modal-sub">Ushbu Schreiben mashq vositasidan foydalanish uchun avval bizning Telegram kanalimizga obuna bo'lishingiz kerak.</p>
+    <a class="btn primary" id="tgGateJoinBtn" href="https://t.me/+erL7nsZWemExNDUy" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-bottom:10px;">📢 Kanalga obuna bo'lish</a>
+    <a href="https://t.me/bedeutungslosM" target="_blank" rel="noopener" style="display:block; text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:16px;">@bedeutungslosM — kanalni ko'rish</a>
+    <button class="btn" id="tgGateConfirmBtn" style="width:100%;">✅ Obuna bo'ldim, davom etish</button>
+  </div>
+</div>
+
 <div class="level-modal-overlay" id="levelModalOverlay">
   <div class="level-modal">
     <div class="level-modal-title">Qaysi darajada mashq qilmoqchisiz?</div>
@@ -2275,7 +2285,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
   }
 
   /* ================= INIT ================= */
-  (function initApp(){
+  function initApp(){
     let storedLevel = null;
     try{ storedLevel = localStorage.getItem(LEVEL_KEY); }catch(e){}
 
@@ -2314,7 +2324,33 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
 
     updateCounts();
     renderTimer();
-  })();
+  }
+
+  /* ================= TELEGRAM KANALGA OBUNA (GATE) =================
+     Sayt hech qanday backend orqali haqiqiy obunani tekshira olmaydi (bu statik sayt),
+     shuning uchun foydalanuvchi o'zi "Obuna bo'ldim" deb tasdiqlaydi. Tasdiq bir marta
+     localStorage'ga saqlanadi va keyingi tashriflarda gate qayta ko'rsatilmaydi. */
+  const TG_SUB_KEY = 'schreibenTrainer_tg_subscribed_v1';
+  const tgGateOverlay = document.getElementById('tgGateOverlay');
+  const tgGateConfirmBtn = document.getElementById('tgGateConfirmBtn');
+
+  function isTgSubscribed(){
+    try{ return localStorage.getItem(TG_SUB_KEY) === '1'; }catch(e){ return false; }
+  }
+  function markTgSubscribed(){
+    try{ localStorage.setItem(TG_SUB_KEY, '1'); }catch(e){}
+  }
+
+  if(isTgSubscribed()){
+    initApp();
+  } else {
+    tgGateOverlay.classList.add('open');
+    tgGateConfirmBtn.addEventListener('click', ()=>{
+      markTgSubscribed();
+      tgGateOverlay.classList.remove('open');
+      initApp();
+    });
+  }
 
 })();
 </script>
