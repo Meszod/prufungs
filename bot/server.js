@@ -25,6 +25,53 @@ function genTeacherKey(){
   return crypto.randomBytes(5).toString('hex');
 }
 
+/* Ball tugmasi bosilganda "endi javob kutilmoqda" holatini saqlaydi: chatId -> {submissionId, messageId} */
+const pendingScoreEntry = new Map();
+
+function gradeSubmission(submissionId, manualScore, fromUser){
+  return store.update((data) => {
+    const sub = data.submissions.find(s => s.id === submissionId);
+    if(!sub) return { ok: false, error: "Bu ish topilmadi (eskirgan bo'lishi mumkin)." };
+    const score = (manualScore != null) ? manualScore : (sub.ai_score !== '' ? Number(sub.ai_score) : null);
+    if(score == null || Number.isNaN(score)){
+      return { ok: false, error: "AI bali mavjud emas — \"Ball kiritish\" orqali qo'lda kiriting." };
+    }
+    sub.final_score = score;
+    sub.graded_by = fromUser.first_name || fromUser.username || String(fromUser.id);
+    sub.graded_by_id = fromUser.id;
+    sub.graded_at = new Date().toISOString();
+    return { ok: true, score };
+  });
+}
+
+function scoreEmoji(score){
+  if(score >= 80) return '🟢';
+  if(score >= 60) return '🟡';
+  return '🔴';
+}
+
+function csvEscape(v){
+  return `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+}
+function toCSV(rows){
+  const header = ['ID', 'Sana', 'Talaba', 'Daraja/Bo\'lim', 'Toifa', 'Mavzu', 'Ball', 'Baholadi', 'Baholangan vaqt'];
+  const lines = [header.map(csvEscape).join(',')];
+  rows.forEach(r => {
+    lines.push([
+      r.id,
+      r.created_at,
+      r.student_name,
+      r.level,
+      r.category,
+      r.task_title,
+      r.final_score != null ? r.final_score : (r.ai_score || ''),
+      r.graded_by || '',
+      r.graded_at || ''
+    ].map(csvEscape).join(','));
+  });
+  return lines.join('\r\n');
+}
+
 function upsertUser(from){
   return store.update((data) => {
     const key = String(from.id);
@@ -223,6 +270,10 @@ app.post('/api/submit', async (req, res) => {
     word_count: wordCount || 0,
     ai_score: aiScore != null ? String(aiScore) : '',
     ai_feedback: aiFeedback || '',
+    final_score: null,
+    graded_by: null,
+    graded_by_id: null,
+    graded_at: null,
     created_at: new Date().toISOString()
   };
   store.update((data) => {
@@ -244,7 +295,7 @@ app.post('/api/submit', async (req, res) => {
 
   const teacherLine = `\n👨‍🏫 Ustoz: ${targetTeacher ? targetTeacher.display_name : "tanlanmagan"}`;
   const header = `📝 Yangi Schreiben ishi\n\n👤 ${submission.student_name}${teacherLine}\n📚 Daraja: ${(submission.level || '').toUpperCase()}${submission.category ? ' / ' + submission.category : ''}\n📌 Mavzu: ${submission.task_title || '-'}\n🔢 So'zlar soni: ${submission.word_count}`;
-  const scoreLine = submission.ai_score ? `\n⭐ Ball: ${submission.ai_score}/100` : '';
+  const scoreLine = submission.ai_score ? `\n⭐ AI bali: ${submission.ai_score}/100` : '';
   const feedbackBlock = submission.ai_feedback ? `\n\n🧾 AI tekshiruvi:\n${submission.ai_feedback}` : '';
   const textBlock = `\n\n✍️ Matn:\n${submission.text_content}`;
   const fullMessage = header + scoreLine + feedbackBlock + textBlock;
@@ -255,11 +306,19 @@ app.post('/api/submit', async (req, res) => {
     chunks.push(fullMessage.slice(i, i + CHUNK));
   }
 
+  const gradeKeyboard = {
+    inline_keyboard: [[
+      { text: `✅ AI bali (${submission.ai_score || '-'})`, callback_data: `acceptai_${submission.id}` },
+      { text: '✏️ Ball kiritish', callback_data: `enterscore_${submission.id}` }
+    ]]
+  };
+
   let notified = 0;
   for(const chatId of recipients){
-    for(const chunk of chunks){
+    for(let i = 0; i < chunks.length; i++){
+      const isLast = i === chunks.length - 1;
       try{
-        await bot.sendMessage(chatId, chunk);
+        await bot.sendMessage(chatId, chunks[i], isLast ? { reply_markup: gradeKeyboard } : undefined);
       }catch(err){
         console.error(`sendMessage xatolik (${chatId}):`, err.message);
       }
@@ -268,6 +327,113 @@ app.post('/api/submit', async (req, res) => {
   }
 
   res.json({ ok: true, submissionId: submission.id, notified });
+});
+
+/* ---- Ball tugmalari: "AI bali bilan qabul qilish" yoki "Ball kiritish" ---- */
+bot.on('callback_query', async (query) => {
+  const data = query.data || '';
+  const chatId = query.message.chat.id;
+  const messageId = query.message.message_id;
+
+  if(data.startsWith('acceptai_')){
+    const submissionId = Number(data.slice('acceptai_'.length));
+    const result = gradeSubmission(submissionId, null, query.from);
+    if(result.ok){
+      await bot.answerCallbackQuery(query.id, { text: `Ball saqlandi: ${result.score}/100` });
+      try{
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [[{ text: `${scoreEmoji(result.score)} Baholandi: ${result.score}/100 — o'zgartirish`, callback_data: `enterscore_${submissionId}` }]] },
+          { chat_id: chatId, message_id: messageId }
+        );
+      }catch(e){ /* xabar allaqachon eskirgan bo'lishi mumkin */ }
+    } else {
+      await bot.answerCallbackQuery(query.id, { text: result.error, show_alert: true });
+    }
+    return;
+  }
+
+  if(data.startsWith('enterscore_')){
+    const submissionId = Number(data.slice('enterscore_'.length));
+    pendingScoreEntry.set(chatId, { submissionId, messageId });
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, `✏️ Ushbu ish uchun ballni raqam bilan yozib yuboring (0-100):`, { reply_markup: { force_reply: true } });
+    return;
+  }
+
+  await bot.answerCallbackQuery(query.id);
+});
+
+/* ---- "Ball kiritish" bosilgach kutilayotgan matnli javobni qabul qiladi ---- */
+bot.on('message', async (msg) => {
+  if(!msg.text || msg.text.startsWith('/')) return; // buyruqlar alohida onText orqali ishlaydi
+  const pending = pendingScoreEntry.get(msg.chat.id);
+  if(!pending) return;
+
+  const num = Number(msg.text.trim().replace(',', '.'));
+  if(!Number.isFinite(num) || num < 0 || num > 100){
+    bot.sendMessage(msg.chat.id, "Iltimos, 0 dan 100 gacha bo'lgan son yuboring (masalan: 78).");
+    return;
+  }
+  pendingScoreEntry.delete(msg.chat.id);
+  const result = gradeSubmission(pending.submissionId, num, msg.from);
+  if(result.ok){
+    bot.sendMessage(msg.chat.id, `✅ Ball saqlandi: ${result.score}/100`);
+    try{
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [[{ text: `${scoreEmoji(result.score)} Baholandi: ${result.score}/100 — o'zgartirish`, callback_data: `enterscore_${pending.submissionId}` }]] },
+        { chat_id: msg.chat.id, message_id: pending.messageId }
+      );
+    }catch(e){ /* xabar allaqachon eskirgan bo'lishi mumkin */ }
+  } else {
+    bot.sendMessage(msg.chat.id, result.error);
+  }
+});
+
+/* ---- Ustoz/admin uchun jadval va CSV eksport ---- */
+function rowsForRequester(fromId){
+  const data = store.load();
+  if(isAdmin(fromId)) return { rows: data.submissions, scope: 'Barcha markazlar' };
+  const user = data.users[String(fromId)];
+  if(user && user.role === 'teacher' && user.teacher_key){
+    return { rows: data.submissions.filter(s => s.teacher_key === user.teacher_key), scope: user.display_name || 'Siz' };
+  }
+  return null;
+}
+
+bot.onText(/^\/jadval$/, (msg) => {
+  const access = rowsForRequester(msg.from.id);
+  if(!access){ bot.sendMessage(msg.chat.id, "Bu buyruq faqat ustoz yoki admin uchun."); return; }
+  const graded = access.rows
+    .filter(r => r.final_score != null)
+    .sort((a, b) => new Date(b.graded_at) - new Date(a.graded_at))
+    .slice(0, 15);
+  if(graded.length === 0){
+    bot.sendMessage(msg.chat.id, "Hali baholangan ish yo'q.");
+    return;
+  }
+  const lines = graded.map(r => {
+    const d = new Date(r.graded_at);
+    const dateStr = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${scoreEmoji(r.final_score)} ${dateStr} — ${r.student_name} — ${r.level}${r.category ? '/' + r.category : ''} — ${r.final_score}/100`;
+  });
+  bot.sendMessage(msg.chat.id, `📊 ${access.scope} — so'nggi baholangan ishlar:\n\n${lines.join('\n')}\n\nTo'liq jadval (Excel/CSV) uchun: /export`);
+});
+
+bot.onText(/^\/export$/, async (msg) => {
+  const access = rowsForRequester(msg.from.id);
+  if(!access){ bot.sendMessage(msg.chat.id, "Bu buyruq faqat ustoz yoki admin uchun."); return; }
+  if(access.rows.length === 0){
+    bot.sendMessage(msg.chat.id, "Hozircha ishlar yo'q.");
+    return;
+  }
+  const csv = '\uFEFF' + toCSV(access.rows); // BOM — Excel'da o'zbekcha harflar to'g'ri ochilishi uchun
+  const buffer = Buffer.from(csv, 'utf8');
+  try{
+    await bot.sendDocument(msg.chat.id, buffer, {}, { filename: `natijalar_${Date.now()}.csv`, contentType: 'text/csv' });
+  }catch(err){
+    console.error('sendDocument xatolik:', err.message);
+    bot.sendMessage(msg.chat.id, "Faylni yuborishda xatolik yuz berdi.");
+  }
 });
 
 /* ================= ADMIN API (/admin panel shu yerga murojaat qiladi) ================= */
