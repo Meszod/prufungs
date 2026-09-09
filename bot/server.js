@@ -42,6 +42,9 @@ function genTeacherKey(){
 /* Ball tugmasi bosilganda "endi javob kutilmoqda" holatini saqlaydi: chatId -> {submissionId, messageId} */
 const pendingScoreEntry = new Map();
 
+/* Admin panelga noto'g'ri parol bilan ko'p urinishlarni kuzatadi: ip -> {count, lockedUntil} */
+const loginAttempts = new Map();
+
 function gradeSubmission(submissionId, manualScore, fromUser){
   return store.update((data) => {
     const sub = data.submissions.find(s => s.id === submissionId);
@@ -65,7 +68,10 @@ function scoreEmoji(score){
 }
 
 function csvEscape(v){
-  return `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  let s = String(v == null ? '' : v);
+  // CSV/Excel formula in'ektsiyasidan himoya: =, +, -, @ bilan boshlansa oldiga bo'sh belgi qo'yiladi
+  if(/^[=+\-@]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
 }
 function toCSV(rows){
   const header = ['ID', 'Sana', 'Talaba', 'Daraja/Bo\'lim', 'Toifa', 'Mavzu', 'Ball', 'Baholadi', 'Baholangan vaqt'];
@@ -214,8 +220,17 @@ bot.onText(/^\/teachers$/, (msg) => {
 
 /* ================= HTTP API ================= */
 const app = express();
+app.set('trust proxy', true); // Railway proxy ortida req.ip to'g'ri (X-Forwarded-For) kelishi uchun
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+/* express.json() buzuq JSON kelsa xato tashlaydi — buni ham JSON formatida qaytaramiz (default Express HTML sahifa chiqaradi). */
+app.use((err, req, res, next) => {
+  if(err && err.type === 'entity.parse.failed'){
+    return res.status(400).json({ error: "So'rov tanasi yaroqsiz JSON" });
+  }
+  next(err);
+});
 
 /* Har bir so'rovni Railway loglariga yozib boradi — muammo bo'lsa tezda topish uchun. */
 app.use((req, res, next) => {
@@ -233,10 +248,31 @@ app.get('/', (req, res) => {
 });
 
 function requireAdmin(req, res, next){
-  const pass = req.headers['x-admin-password'];
-  if(!ADMIN_PASSWORD || pass !== ADMIN_PASSWORD){
+  const pass = req.headers['x-admin-password'] || '';
+  if(!ADMIN_PASSWORD){
     return res.status(401).json({ error: 'unauthorized' });
   }
+  // Brute-force himoyasi: bir IP dan ketma-ket ko'p noto'g'ri urinishlar vaqtincha bloklanadi
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const attempt = loginAttempts.get(ip);
+  if(attempt && attempt.lockedUntil && Date.now() < attempt.lockedUntil){
+    return res.status(429).json({ error: "Juda ko'p noto'g'ri urinish. Birozdan so'ng qayta urinib ko'ring." });
+  }
+  // Taymingga chidamli solishtirish — parol uzunligini/vaqtini bilib olishning oldini oladi
+  const passBuf = Buffer.from(pass);
+  const realBuf = Buffer.from(ADMIN_PASSWORD);
+  const matches = passBuf.length === realBuf.length && crypto.timingSafeEqual(passBuf, realBuf);
+  if(!matches){
+    const current = loginAttempts.get(ip) || { count: 0, lockedUntil: null };
+    current.count++;
+    if(current.count >= 8){
+      current.lockedUntil = Date.now() + 5 * 60 * 1000; // 5 daqiqaga bloklash
+      current.count = 0;
+    }
+    loginAttempts.set(ip, current);
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  loginAttempts.delete(ip);
   next();
 }
 
@@ -518,7 +554,10 @@ app.post('/api/admin/teachers', requireAdmin, (req, res) => {
   if(!telegramId || !displayName){
     return res.status(400).json({ error: 'telegramId va displayName kerak' });
   }
-  const teacher = promoteToTeacher(telegramId, String(displayName).trim());
+  if(!/^\d+$/.test(String(telegramId))){
+    return res.status(400).json({ error: "telegramId faqat raqamlardan iborat bo'lishi kerak" });
+  }
+  const teacher = promoteToTeacher(telegramId, String(displayName).trim().slice(0, 100));
   res.json({ ok: true, teacher });
 });
 
@@ -547,6 +586,29 @@ app.get('/api/admin/export.csv', requireAdmin, (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="natijalar_${Date.now()}.csv"`);
   res.send(csv);
 });
+
+/* API yo'llaridan tashqarisiga tushgan so'rovlar uchun toza JSON 404 (Express'ning standart HTML sahifasi o'rniga). */
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Bunday API yo\'li topilmadi' });
+});
+
+/* So'nggi umumiy xato ushlagich — biror route ichida kutilmagan xato tashlansa ham server yiqilmaydi. */
+app.use((err, req, res, next) => {
+  console.error('Express xatolik:', err && err.stack ? err.stack : err);
+  if(res.headersSent) return next(err);
+  res.status(500).json({ error: 'Server xatosi' });
+});
+
+/* Eskirgan tekshiruv sessiyalarini vaqti-vaqti bilan tozalaydi (fayl cheksiz o'smasligi uchun). */
+setInterval(() => {
+  store.update((data) => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24 soatdan eski
+    Object.keys(data.verifySessions).forEach((id) => {
+      const s = data.verifySessions[id];
+      if(new Date(s.created_at).getTime() < cutoff) delete data.verifySessions[id];
+    });
+  });
+}, 60 * 60 * 1000); // har soatda
 
 app.listen(PORT, () => {
   console.log(`HTTP server ${PORT} portda ishga tushdi. DB: ${store.DB_PATH}`);
