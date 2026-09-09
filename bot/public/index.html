@@ -50,6 +50,12 @@
   <p class="sub" id="statsLine"></p>
 
   <div class="card">
+    <h2>Natijalar</h2>
+    <p class="sub" style="margin:0 0 12px;">Barcha markazlar bo'yicha yuborilgan va baholangan ishlar ro'yxati.</p>
+    <button class="btn-ghost" id="exportBtn">📥 CSV yuklab olish (Excel'da ochiladi)</button>
+  </div>
+
+  <div class="card">
     <h2>Yangi ustoz qo'shish</h2>
     <p class="sub" style="margin:0 0 12px;">Ustoz avval botga <b>/start</b> bosishi kerak — shundan keyin u pastdagi "Kutilayotganlar" ro'yxatida chiqadi.</p>
     <select id="candidateSelect"></select>
@@ -184,6 +190,24 @@
     if(!res.ok){ errEl.textContent = 'Xatolik yuz berdi.'; return; }
     document.getElementById('displayNameInput').value = '';
     loadOverview();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', async ()=>{
+    try{
+      const res = await fetch(API_BASE + '/api/admin/export.csv', { headers: authHeaders() });
+      if(!res.ok){ alert('Yuklab olishda xatolik.'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'natijalar_' + Date.now() + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }catch(e){
+      alert('Yuklab olishda xatolik.');
+    }
   });
 
   // Agar parol sessionStorage'da saqlangan bo'lsa, avtomatik kirish

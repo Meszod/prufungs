@@ -476,6 +476,14 @@ app.delete('/api/admin/teachers/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/admin/export.csv', requireAdmin, (req, res) => {
+  const data = store.load();
+  const csv = '\uFEFF' + toCSV(data.submissions); // BOM — Excel'da o'zbekcha harflar to'g'ri ochilishi uchun
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="natijalar_${Date.now()}.csv"`);
+  res.send(csv);
+});
+
 app.listen(PORT, () => {
   console.log(`HTTP server ${PORT} portda ishga tushdi. DB: ${store.DB_PATH}`);
 });
