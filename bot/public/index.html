@@ -120,7 +120,7 @@
       row.className = 'row';
       row.innerHTML = `
         <div>
-          <div class="row-name">${t.display_name || '(nomsiz)'}</div>
+          <div class="row-name">${t.display_name || '(nomsiz)'}${t.is_paused ? ' <span style="color:#b0402f;font-size:11px;">⏸ band</span>' : ''}</div>
           <div class="row-meta">@${t.username || '-'} · ID: ${t.telegram_id} · kalit: <span class="key-badge">${t.teacher_key}</span></div>
         </div>
         <div class="row-actions">
