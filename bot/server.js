@@ -79,6 +79,20 @@ function askForComment(chatId, submissionId){
   }).catch((e)=> console.error('askForComment xatolik:', e.message));
 }
 
+/* Ball qo'yilganda — izohdan qat'i nazar — o'quvchiga darhol xabar beradi (agar uning Telegram ID'si bog'langan bo'lsa). */
+async function notifyStudentOfScore(submissionId){
+  const data = store.load();
+  const sub = data.submissions.find(s => s.id === submissionId);
+  if(!sub || !sub.student_telegram_id || sub.final_score == null) return;
+  try{
+    await bot.sendMessage(sub.student_telegram_id,
+      `✅ Ishingiz baholandi!\n\n📌 ${sub.task_title || 'Schreiben'}\n${scoreEmoji(sub.final_score)} Ball: ${sub.final_score}/100\n\nBatafsil: /cv`
+    );
+  }catch(err){
+    console.error(`o'quvchiga (${sub.student_telegram_id}) ball haqida xabar berishda xatolik:`, err.message);
+  }
+}
+
 function csvEscape(v){
   let s = String(v == null ? '' : v);
   // CSV/Excel formula in'ektsiyasidan himoya: =, +, -, @ bilan boshlansa oldiga bo'sh belgi qo'yiladi
@@ -193,6 +207,19 @@ async function notifyNewTeacherIfNeeded(beforeUser, teacher){
   }
 }
 
+/* Rolga mos buyruqlar ro'yxati — /start va /yordam ikkalasida ishlatiladi. */
+function buildCommandLines(user, telegramId){
+  const lines = [];
+  if(isAdmin(telegramId)){
+    lines.push('Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '/jadval — so\'nggi baholangan ishlar', '/reyting — eng yaxshi natijalar', '/export — barcha natijalar CSV', '/yordam — shu ro\'yxatni qayta ko\'rish', '', 'Yoki /admin panelidan foydalaning.');
+  } else if(user.role === 'teacher'){
+    lines.push(`Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish', '/yordam — shu ro\'yxatni qayta ko\'rish');
+  } else {
+    lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
+  }
+  return lines;
+}
+
 bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
   const chatId = msg.chat.id;
   const user = upsertUser(msg.from);
@@ -231,16 +258,16 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     `Salom, ${msg.from.first_name || ''}! 👋`,
     ``,
     `Sizning Telegram ID: ${msg.from.id}`,
-    `Rol: ${user.role}`
-  ];
-  if(isAdmin(msg.from.id)){
-    lines.push('', 'Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '/jadval — so\'nggi baholangan ishlar', '/reyting — eng yaxshi natijalar', '/export — barcha natijalar CSV', '', 'Yoki /admin panelidan foydalaning.');
-  } else if(user.role === 'teacher'){
-    lines.push('', `Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish');
-  } else {
-    lines.push('', 'Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.");
-  }
+    `Rol: ${user.role}`,
+    ''
+  ].concat(buildCommandLines(user, msg.from.id));
   bot.sendMessage(chatId, lines.join('\n'), { reply_markup: mainMenuKeyboard(user, msg.from.id) });
+});
+
+bot.onText(/^\/yordam$/, (msg) => {
+  const user = upsertUser(msg.from);
+  const lines = ['📖 Yordam — mavjud buyruqlar:', ''].concat(buildCommandLines(user, msg.from.id));
+  bot.sendMessage(msg.chat.id, lines.join('\n'), { reply_markup: mainMenuKeyboard(user, msg.from.id) });
 });
 
 bot.onText(/^\/whoami$/, (msg) => {
@@ -504,6 +531,7 @@ bot.on('callback_query', async (query) => {
           { chat_id: chatId, message_id: messageId }
         );
       }catch(e){ /* xabar allaqachon eskirgan bo'lishi mumkin */ }
+      notifyStudentOfScore(submissionId);
       askForComment(chatId, submissionId);
     } else {
       await bot.answerCallbackQuery(query.id, { text: result.error, show_alert: true });
@@ -613,6 +641,7 @@ bot.on('message', async (msg) => {
         { chat_id: msg.chat.id, message_id: pending.messageId }
       );
     }catch(e){ /* xabar allaqachon eskirgan bo'lishi mumkin */ }
+    notifyStudentOfScore(pending.submissionId);
     askForComment(msg.chat.id, pending.submissionId);
   } else {
     bot.sendMessage(msg.chat.id, result.error);
