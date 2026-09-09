@@ -167,6 +167,7 @@ bot.on('polling_error', (err) => console.error('polling_error:', err.message));
 const PUBLIC_BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
   ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
   : (process.env.PUBLIC_BASE_URL || null);
+const SITE_URL = process.env.SITE_URL || 'https://prufungs.netlify.app';
 
 /* Har bir rol uchun mos inline asosiy menyu. */
 function mainMenuKeyboard(user, telegramId){
@@ -238,8 +239,8 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
           }
         });
         await bot.sendMessage(chatId,
-          `✅ Obuna tasdiqlandi! Endi saytga qaytib davom etishingiz mumkin.\n\n` +
-          `Sizning Telegram ID: ${msg.from.id}\nRol: ${user.role}`
+          `✅ Obuna tasdiqlandi!\n\nSizning Telegram ID: ${msg.from.id}\nRol: ${user.role}`,
+          { reply_markup: { inline_keyboard: [[{ text: '🌐 Platformaga qaytish', url: SITE_URL }]] } }
         );
       } else {
         await bot.sendMessage(chatId,
