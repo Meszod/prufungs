@@ -16,6 +16,20 @@ if(!BOT_TOKEN){
   console.error('XATOLIK: BOT_TOKEN environment variable topilmadi.');
   process.exit(1);
 }
+if(!ADMIN_PASSWORD){
+  console.warn('OGOHLANTIRISH: ADMIN_PASSWORD o\'rnatilmagan — /admin paneli ishlamaydi (barcha so\'rovlar 401 qaytaradi).');
+}
+if(!ADMIN_TELEGRAM_ID){
+  console.warn('OGOHLANTIRISH: ADMIN_TELEGRAM_ID o\'rnatilmagan — admin buyruqlari va bildirishnomalar ishlamaydi.');
+}
+
+/* Bot yoki server kutilmagan xatolik bilan yiqilib qolmasligi uchun — faqat log yozadi, jarayonni davom ettiradi. */
+process.on('unhandledRejection', (err) => {
+  console.error('unhandledRejection:', err && err.stack ? err.stack : err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err && err.stack ? err.stack : err);
+});
 
 function isAdmin(telegramId){
   return ADMIN_TELEGRAM_ID && String(telegramId) === String(ADMIN_TELEGRAM_ID);
@@ -154,11 +168,11 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     `Rol: ${user.role}`
   ];
   if(isAdmin(msg.from.id)){
-    lines.push('', 'Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '', 'Yoki /admin panelidan foydalaning.');
+    lines.push('', 'Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '/jadval — so\'nggi baholangan ishlar', '/export — barcha natijalar CSV', '', 'Yoki /admin panelidan foydalaning.');
   } else if(user.role === 'teacher'){
-    lines.push('', `Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`);
+    lines.push('', `Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/export — o\'z natijalaringiz CSV');
   } else {
-    lines.push('', 'Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.');
+    lines.push('', 'Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.");
   }
   bot.sendMessage(chatId, lines.join('\n'));
 });
@@ -202,6 +216,16 @@ bot.onText(/^\/teachers$/, (msg) => {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+/* Har bir so'rovni Railway loglariga yozib boradi — muammo bo'lsa tezda topish uchun. */
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);
+  });
+  next();
+});
+
 app.use('/admin', express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -239,7 +263,7 @@ app.get('/api/verify/status/:sessionId', (req, res) => {
   if(session.status === 'pending' && age > VERIFY_SESSION_TTL_MS){
     return res.json({ status: 'expired' });
   }
-  res.json({ status: session.status });
+  res.json({ status: session.status, telegramId: session.telegram_id || null });
 });
 
 /* ---- Sayt uchun ochiq (auth talab qilmaydigan) ustozlar ro'yxati ---- */
@@ -254,79 +278,85 @@ app.get('/api/teachers/public', (req, res) => {
 
 /* ---- O'quvchi ishini yuborish: TANLANGAN ustozga + har doim adminga ---- */
 app.post('/api/submit', async (req, res) => {
-  const { studentName, teacherKey, level, category, taskTitle, text, wordCount, aiScore, aiFeedback } = req.body || {};
-  if(!studentName || !text){
-    return res.status(400).json({ error: "studentName va text majburiy" });
-  }
-
-  const submission = {
-    id: null,
-    student_name: String(studentName).slice(0, 200),
-    teacher_key: teacherKey || '',
-    level: level || '',
-    category: category || '',
-    task_title: taskTitle || '',
-    text_content: text,
-    word_count: wordCount || 0,
-    ai_score: aiScore != null ? String(aiScore) : '',
-    ai_feedback: aiFeedback || '',
-    final_score: null,
-    graded_by: null,
-    graded_by_id: null,
-    graded_at: null,
-    created_at: new Date().toISOString()
-  };
-  store.update((data) => {
-    submission.id = data.nextSubmissionId++;
-    data.submissions.push(submission);
-    if(data.submissions.length > 500) data.submissions = data.submissions.slice(-500);
-  });
-
-  const data = store.load();
-  const targetTeacher = teacherKey
-    ? Object.values(data.users).find(u => u.role === 'teacher' && u.teacher_key === teacherKey)
-    : null;
-
-  const recipients = [];
-  if(targetTeacher) recipients.push(targetTeacher.telegram_id);
-  if(ADMIN_TELEGRAM_ID && Number(ADMIN_TELEGRAM_ID) !== (targetTeacher ? targetTeacher.telegram_id : null)){
-    recipients.push(Number(ADMIN_TELEGRAM_ID));
-  }
-
-  const teacherLine = `\n👨‍🏫 Ustoz: ${targetTeacher ? targetTeacher.display_name : "tanlanmagan"}`;
-  const header = `📝 Yangi Schreiben ishi\n\n👤 ${submission.student_name}${teacherLine}\n📚 Daraja: ${(submission.level || '').toUpperCase()}${submission.category ? ' / ' + submission.category : ''}\n📌 Mavzu: ${submission.task_title || '-'}\n🔢 So'zlar soni: ${submission.word_count}`;
-  const scoreLine = submission.ai_score ? `\n⭐ AI bali: ${submission.ai_score}/100` : '';
-  const feedbackBlock = submission.ai_feedback ? `\n\n🧾 AI tekshiruvi:\n${submission.ai_feedback}` : '';
-  const textBlock = `\n\n✍️ Matn:\n${submission.text_content}`;
-  const fullMessage = header + scoreLine + feedbackBlock + textBlock;
-
-  const CHUNK = 3500;
-  const chunks = [];
-  for(let i = 0; i < fullMessage.length; i += CHUNK){
-    chunks.push(fullMessage.slice(i, i + CHUNK));
-  }
-
-  const gradeKeyboard = {
-    inline_keyboard: [[
-      { text: `✅ AI bali (${submission.ai_score || '-'})`, callback_data: `acceptai_${submission.id}` },
-      { text: '✏️ Ball kiritish', callback_data: `enterscore_${submission.id}` }
-    ]]
-  };
-
-  let notified = 0;
-  for(const chatId of recipients){
-    for(let i = 0; i < chunks.length; i++){
-      const isLast = i === chunks.length - 1;
-      try{
-        await bot.sendMessage(chatId, chunks[i], isLast ? { reply_markup: gradeKeyboard } : undefined);
-      }catch(err){
-        console.error(`sendMessage xatolik (${chatId}):`, err.message);
-      }
+  try{
+    const { studentName, studentTelegramId, teacherKey, level, category, taskTitle, text, wordCount, aiScore, aiFeedback } = req.body || {};
+    if(!studentName || !text){
+      return res.status(400).json({ error: "studentName va text majburiy" });
     }
-    notified++;
-  }
 
-  res.json({ ok: true, submissionId: submission.id, notified });
+    const submission = {
+      id: null,
+      student_name: String(studentName).slice(0, 200),
+      student_telegram_id: studentTelegramId || null,
+      teacher_key: teacherKey || '',
+      level: level || '',
+      category: category || '',
+      task_title: taskTitle || '',
+      text_content: text,
+      word_count: wordCount || 0,
+      ai_score: aiScore != null ? String(aiScore) : '',
+      ai_feedback: aiFeedback || '',
+      final_score: null,
+      graded_by: null,
+      graded_by_id: null,
+      graded_at: null,
+      created_at: new Date().toISOString()
+    };
+    store.update((data) => {
+      submission.id = data.nextSubmissionId++;
+      data.submissions.push(submission);
+      if(data.submissions.length > 500) data.submissions = data.submissions.slice(-500);
+    });
+
+    const data = store.load();
+    const targetTeacher = teacherKey
+      ? Object.values(data.users).find(u => u.role === 'teacher' && u.teacher_key === teacherKey)
+      : null;
+
+    const recipients = [];
+    if(targetTeacher) recipients.push(targetTeacher.telegram_id);
+    if(ADMIN_TELEGRAM_ID && Number(ADMIN_TELEGRAM_ID) !== (targetTeacher ? targetTeacher.telegram_id : null)){
+      recipients.push(Number(ADMIN_TELEGRAM_ID));
+    }
+
+    const teacherLine = `\n👨‍🏫 Ustoz: ${targetTeacher ? targetTeacher.display_name : "tanlanmagan"}`;
+    const header = `📝 Yangi Schreiben ishi\n\n👤 ${submission.student_name}${teacherLine}\n📚 Daraja: ${(submission.level || '').toUpperCase()}${submission.category ? ' / ' + submission.category : ''}\n📌 Mavzu: ${submission.task_title || '-'}\n🔢 So'zlar soni: ${submission.word_count}`;
+    const scoreLine = submission.ai_score ? `\n⭐ AI bali: ${submission.ai_score}/100` : '';
+    const feedbackBlock = submission.ai_feedback ? `\n\n🧾 AI tekshiruvi:\n${submission.ai_feedback}` : '';
+    const textBlock = `\n\n✍️ Matn:\n${submission.text_content}`;
+    const fullMessage = header + scoreLine + feedbackBlock + textBlock;
+
+    const CHUNK = 3500;
+    const chunks = [];
+    for(let i = 0; i < fullMessage.length; i += CHUNK){
+      chunks.push(fullMessage.slice(i, i + CHUNK));
+    }
+
+    const gradeKeyboard = {
+      inline_keyboard: [[
+        { text: `✅ AI bali (${submission.ai_score || '-'})`, callback_data: `acceptai_${submission.id}` },
+        { text: '✏️ Ball kiritish', callback_data: `enterscore_${submission.id}` }
+      ]]
+    };
+
+    let notified = 0;
+    for(const chatId of recipients){
+      for(let i = 0; i < chunks.length; i++){
+        const isLast = i === chunks.length - 1;
+        try{
+          await bot.sendMessage(chatId, chunks[i], isLast ? { reply_markup: gradeKeyboard } : undefined);
+        }catch(err){
+          console.error(`sendMessage xatolik (${chatId}):`, err.message);
+        }
+      }
+      notified++;
+    }
+
+    res.json({ ok: true, submissionId: submission.id, notified });
+  }catch(err){
+    console.error('/api/submit xatolik:', err && err.stack ? err.stack : err);
+    res.status(500).json({ error: "Server xatosi, birozdan so'ng qayta urinib ko'ring." });
+  }
 });
 
 /* ---- Ball tugmalari: "AI bali bilan qabul qilish" yoki "Ball kiritish" ---- */
@@ -399,6 +429,40 @@ function rowsForRequester(fromId){
   }
   return null;
 }
+
+/* ---- O'quvchi uchun: FAQAT o'zining natijalari (Telegram orqali obuna tekshiruvidan o'tganlar uchun) ---- */
+bot.onText(/^\/cv$/, (msg) => {
+  const data = store.load();
+  const rows = data.submissions.filter(s => s.student_telegram_id && String(s.student_telegram_id) === String(msg.from.id));
+  if(rows.length === 0){
+    bot.sendMessage(msg.chat.id,
+      "Sizda hali yuborilgan ish topilmadi.\n\n" +
+      "Eslatma: bu buyruq faqat saytda Telegram orqali obunani tasdiqlab (✅ Tekshirish tugmasi) Schreiben yozgan ishlar uchun ishlaydi. " +
+      "Agar avvalroq obunani tasdiqlagan bo'lsangiz-u, hali natija ko'rmayotgan bo'lsangiz — saytda birinchi yozuvingizni yuboring, keyingi safar shu yerda ko'rinadi."
+    );
+    return;
+  }
+  const sorted = rows.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const graded = sorted.filter(r => r.final_score != null);
+  const avg = graded.length ? Math.round(graded.reduce((sum, r) => sum + r.final_score, 0) / graded.length) : null;
+
+  const lines = sorted.slice(0, 20).map(r => {
+    const d = new Date(r.created_at);
+    const dateStr = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
+    let scoreText;
+    if(r.final_score != null){
+      scoreText = `${scoreEmoji(r.final_score)} ${r.final_score}/100`;
+    } else if(r.ai_score){
+      scoreText = `⏳ ${r.ai_score}/100 (AI, ustoz hali tasdiqlamagan)`;
+    } else {
+      scoreText = '⏳ hali baholanmagan';
+    }
+    return `${dateStr} — ${r.level}${r.category ? '/' + r.category : ''} — ${r.task_title || '-'} — ${scoreText}`;
+  });
+
+  const header = `📋 Sizning natijalaringiz (${rows.length} ta ish)` + (avg != null ? `\nO'rtacha ball: ${avg}/100 (${graded.length} ta baholangan)` : '');
+  bot.sendMessage(msg.chat.id, `${header}\n\n${lines.join('\n')}`);
+});
 
 bot.onText(/^\/jadval$/, (msg) => {
   const access = rowsForRequester(msg.from.id);

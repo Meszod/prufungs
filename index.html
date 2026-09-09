@@ -2389,6 +2389,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
      -> bot getChatMember bilan tekshiradi -> 3) sayt statusni poll qiladi, "confirmed" bo'lganda gate yopiladi. */
   const BOT_API_BASE = 'https://prufungs-bot-production.up.railway.app';
   const TG_SUB_KEY = 'schreibenTrainer_tg_subscribed_v1';
+  const STUDENT_TG_ID_KEY = 'schreibenTrainer_student_tg_id_v1';
   const tgGateOverlay = document.getElementById('tgGateOverlay');
   const tgGateVerifyBtn = document.getElementById('tgGateVerifyBtn');
   const tgGateStatus = document.getElementById('tgGateStatus');
@@ -2424,6 +2425,9 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
             stopTgPolling();
             tgGateStatus.textContent = '✅ Tasdiqlandi!';
             markTgSubscribed();
+            if(statusData.telegramId){
+              try{ localStorage.setItem(STUDENT_TG_ID_KEY, String(statusData.telegramId)); }catch(e){}
+            }
             setTimeout(()=>{
               tgGateOverlay.classList.remove('open');
               initApp();
@@ -2548,6 +2552,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     const feedbackText = [parsed.summary || '', issuesToText(parsed.issues)].filter(Boolean).join('\n\n');
     const payload = {
       studentName: name,
+      studentTelegramId: (function(){ try{ return localStorage.getItem(STUDENT_TG_ID_KEY) || ''; }catch(e){ return ''; } })(),
       teacherKey: teacherKey || '',
       level: inArena ? ('ARENA/' + (ARENA_META[currentArenaSection] ? ARENA_META[currentArenaSection].name : currentArenaSection)) : currentLevel,
       category: cat ? cat.label : currentCategory,
