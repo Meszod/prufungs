@@ -429,6 +429,22 @@ app.post('/api/submit', async (req, res) => {
       return res.status(400).json({ error: "studentName va text majburiy" });
     }
 
+    // Dublikatni ushlash: bir xil o'quvchi bir xil matnni qisqa vaqt ichida qayta yuborsa
+    // (tugmani ikki marta bosish, tarmoq qayta urinishi, yoki bir xil ishni qayta tekshirtirish),
+    // ustozga/adminga qayta xabar bormaydi — mavjud yozuv qaytariladi.
+    const DUPLICATE_WINDOW_MS = 10 * 60 * 1000; // 10 daqiqa
+    const dupData = store.load();
+    const now = Date.now();
+    const duplicate = dupData.submissions.find((s) => {
+      const sameStudent = studentTelegramId
+        ? String(s.student_telegram_id) === String(studentTelegramId)
+        : s.student_name === String(studentName).slice(0, 200);
+      return sameStudent && s.text_content === text && (now - new Date(s.created_at).getTime()) < DUPLICATE_WINDOW_MS;
+    });
+    if(duplicate){
+      return res.json({ ok: true, submissionId: duplicate.id, duplicate: true, notified: 0 });
+    }
+
     const submission = {
       id: null,
       student_name: String(studentName).slice(0, 200),

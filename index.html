@@ -1882,8 +1882,27 @@
 
   /* ================= FINISH / DOWNLOAD / CLEAR ================= */
   let hasFinished = false;
+  let lastCheckedText = null; // oxirgi AI tekshiruvidan o'tgan matn — shu matn o'zgarmaguncha qayta tekshirish bloklanadi
+
+  function updateCheckBtnLockState(){
+    if(!hasFinished){
+      checkBtn.disabled = true;
+      checkBtn.title = "Avval 'Yakunlash' tugmasini bosing";
+      return;
+    }
+    if(lastCheckedText !== null && writingArea.value.trim() === lastCheckedText){
+      checkBtn.disabled = true;
+      checkBtn.title = "Bu matn allaqachon tekshirildi. Qayta tekshirish uchun matnni o'zgartiring.";
+      return;
+    }
+    checkBtn.disabled = false;
+    checkBtn.title = '';
+  }
+  writingArea.addEventListener('input', updateCheckBtnLockState);
+
   function lockFinishGatedButtons(){
     hasFinished = false;
+    lastCheckedText = null;
     checkBtn.disabled = true;
     checkBtn.title = "Avval 'Yakunlash' tugmasini bosing";
     sampleBtn.disabled = true;
@@ -1891,8 +1910,7 @@
   }
   function unlockFinishGatedButtons(){
     hasFinished = true;
-    checkBtn.disabled = false;
-    checkBtn.title = '';
+    updateCheckBtnLockState();
     sampleBtn.disabled = false;
     sampleBtn.title = '';
   }
@@ -2121,11 +2139,12 @@ ${text}
         if(statsPanel.style.display !== 'none') renderStatsPanel();
       }
       sendSubmissionToTeacher(parsed, text);
+      lastCheckedText = text;
     }catch(err){
       feedbackPanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
       console.error("AI check error:", err);
     }finally{
-      checkBtn.disabled = false;
+      updateCheckBtnLockState();
     }
   }
 
