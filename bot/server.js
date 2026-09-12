@@ -43,6 +43,10 @@ function genTeacherKey(){
 const pendingScoreEntry = new Map();
 /* Izoh yozish so'ralganda kutilayotgan holat: chatId -> submissionId */
 const pendingCommentEntry = new Map();
+/* /xabar tasdiqlanishini kutayotgan xabarlar: chatId -> {text, ids, scope} */
+const pendingBroadcast = new Map();
+/* /tozalash tasdiqlanishini kutayotgan holat: chatId -> true */
+const pendingClear = new Map();
 
 /* Admin panelga noto'g'ri parol bilan ko'p urinishlarni kuzatadi: ip -> {count, lockedUntil} */
 const loginAttempts = new Map();
@@ -212,9 +216,9 @@ async function notifyNewTeacherIfNeeded(beforeUser, teacher){
 function buildCommandLines(user, telegramId){
   const lines = [];
   if(isAdmin(telegramId)){
-    lines.push('Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '/jadval — so\'nggi baholangan ishlar', '/reyting — eng yaxshi natijalar', '/export — barcha natijalar CSV', '/yordam — shu ro\'yxatni qayta ko\'rish', '', 'Yoki /admin panelidan foydalaning.');
+    lines.push('Siz adminsiz. Buyruqlar:', '/addteacher <id> <Ism Familya> — ustoz qo\'shish', '/removeteacher <id> — ustozni olib tashlash', '/teachers — ustozlar ro\'yxati', '/jadval — so\'nggi baholangan ishlar', '/reyting — eng yaxshi natijalar', '/export — barcha natijalar CSV', '/tahrirla <id> <ball> — ballni tuzatish', '/tozalash — jadvalni butunlay tozalash', '/xabar <matn> — barcha o\'quvchilarga xabar yuborish', '/yordam — shu ro\'yxatni qayta ko\'rish', '', 'Yoki /admin panelidan foydalaning.');
   } else if(user.role === 'teacher'){
-    lines.push(`Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish', '/yordam — shu ro\'yxatni qayta ko\'rish');
+    lines.push(`Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/tahrirla <id> <ball> — o\'z o\'quvchingiz ballini tuzatish', '/xabar <matn> — o\'z o\'quvchilaringizga xabar yuborish', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish', '/yordam — shu ro\'yxatni qayta ko\'rish');
   } else {
     lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
   }
@@ -616,6 +620,61 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
+  if(data === 'broadcast_confirm'){
+    const pending = pendingBroadcast.get(chatId);
+    if(!pending){
+      await bot.answerCallbackQuery(query.id, { text: "Muddati o'tgan, qayta /xabar yozing" });
+      return;
+    }
+    pendingBroadcast.delete(chatId);
+    await bot.answerCallbackQuery(query.id, { text: 'Yuborilmoqda...' });
+    try{ await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }); }catch(e){}
+    let sent = 0;
+    for(const id of pending.ids){
+      try{
+        await bot.sendMessage(id, `📢 Xabar:\n\n${pending.text}`);
+        sent++;
+      }catch(err){
+        console.error(`broadcast xatolik (${id}):`, err.message);
+      }
+      await new Promise((r) => setTimeout(r, 40)); // Telegram flood-limitidan qochish uchun kichik pauza
+    }
+    await bot.sendMessage(chatId, `✅ Xabar yuborildi: ${sent}/${pending.ids.length} ta o'quvchiga.`);
+    return;
+  }
+  if(data === 'broadcast_cancel'){
+    pendingBroadcast.delete(chatId);
+    await bot.answerCallbackQuery(query.id, { text: 'Bekor qilindi' });
+    try{ await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }); }catch(e){}
+    return;
+  }
+
+  if(data === 'clear_confirm'){
+    if(!isAdmin(query.from.id)){
+      await bot.answerCallbackQuery(query.id, { text: 'Faqat admin uchun', show_alert: true });
+      return;
+    }
+    if(!pendingClear.get(chatId)){
+      await bot.answerCallbackQuery(query.id, { text: "Muddati o'tgan, qayta /tozalash yozing" });
+      return;
+    }
+    pendingClear.delete(chatId);
+    const removed = store.update((d) => {
+      const n = d.submissions.length;
+      d.submissions = [];
+      return n;
+    });
+    await bot.answerCallbackQuery(query.id, { text: "O'chirildi" });
+    try{ await bot.editMessageText(`🗑 ${removed} ta yozuv o'chirildi.`, { chat_id: chatId, message_id: messageId }); }catch(e){}
+    return;
+  }
+  if(data === 'clear_cancel'){
+    pendingClear.delete(chatId);
+    await bot.answerCallbackQuery(query.id, { text: 'Bekor qilindi' });
+    try{ await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId }); }catch(e){}
+    return;
+  }
+
   await bot.answerCallbackQuery(query.id);
 });
 
@@ -675,6 +734,94 @@ function rowsForRequester(fromId){
   }
   return null;
 }
+
+/* ---- /xabar — o'quvchilarga ogohlantirish/xabar yuborish (tasdiqlash bilan) ---- */
+function getBroadcastAudience(fromId){
+  const data = store.load();
+  if(isAdmin(fromId)){
+    const ids = Object.values(data.users).filter(u => u.role === 'student').map(u => u.telegram_id);
+    return { ids, scope: "Barcha o'quvchilar" };
+  }
+  const me = data.users[String(fromId)];
+  if(me && me.role === 'teacher' && me.teacher_key){
+    const idSet = new Set();
+    data.submissions.forEach(s => {
+      if(s.teacher_key === me.teacher_key && s.student_telegram_id) idSet.add(Number(s.student_telegram_id));
+    });
+    return { ids: Array.from(idSet), scope: `${me.display_name || 'Sizning'} o'quvchilaringiz` };
+  }
+  return null;
+}
+bot.onText(/^\/xabar(?:\s+([\s\S]+))?$/, (msg, match) => {
+  const text = match && match[1] ? match[1].trim() : '';
+  if(!text){
+    bot.sendMessage(msg.chat.id, "Xabar matnini yozing, masalan:\n/xabar Ertaga dars bo'lmaydi.");
+    return;
+  }
+  const audience = getBroadcastAudience(msg.from.id);
+  if(!audience){
+    bot.sendMessage(msg.chat.id, "Bu buyruq faqat ustoz yoki admin uchun.");
+    return;
+  }
+  if(audience.ids.length === 0){
+    bot.sendMessage(msg.chat.id, "Hozircha xabar yuborish uchun hech kim topilmadi (o'quvchilar botga hali /start bosmagan yoki hali sizga bog'lanmagan).");
+    return;
+  }
+  pendingBroadcast.set(msg.chat.id, { text, ids: audience.ids, scope: audience.scope });
+  bot.sendMessage(msg.chat.id,
+    `📢 Quyidagi xabar ${audience.ids.length} ta o'quvchiga (${audience.scope}) yuboriladi:\n\n"${text}"\n\nTasdiqlaysizmi?`,
+    { reply_markup: { inline_keyboard: [[
+      { text: '✅ Ha, yubor', callback_data: 'broadcast_confirm' },
+      { text: '❌ Bekor qilish', callback_data: 'broadcast_cancel' }
+    ]] } }
+  );
+});
+
+/* ---- /tozalash — jadvalni (barcha natijalarni) o'chirish, faqat admin, tasdiqlash bilan ---- */
+bot.onText(/^\/tozalash$/, (msg) => {
+  if(!isAdmin(msg.from.id)) return;
+  const data = store.load();
+  const count = data.submissions.length;
+  if(count === 0){ bot.sendMessage(msg.chat.id, "Jadval allaqachon bo'sh."); return; }
+  pendingClear.set(msg.chat.id, true);
+  bot.sendMessage(msg.chat.id,
+    `⚠️ Diqqat! Bu ${count} ta yozuvni (BARCHA natijalarni, barcha markazlar bo'yicha) butunlay o'chiradi. Bu amalni ortga qaytarib bo'lmaydi.\n\nRostdan ham davom etasizmi?`,
+    { reply_markup: { inline_keyboard: [[
+      { text: "🗑 Ha, hammasini o'chir", callback_data: 'clear_confirm' },
+      { text: '❌ Bekor qilish', callback_data: 'clear_cancel' }
+    ]] } }
+  );
+});
+
+/* ---- /tahrirla <id> <ball> — mavjud yozuvning ballini tuzatish ---- */
+bot.onText(/^\/tahrirla\s+(\d+)\s+(\d+(?:[.,]\d+)?)$/, (msg, match) => {
+  const id = Number(match[1]);
+  const newScore = Math.round(Number(match[2].replace(',', '.')));
+  if(!Number.isFinite(newScore) || newScore < 0 || newScore > 100){
+    bot.sendMessage(msg.chat.id, "Ball 0 dan 100 gacha bo'lgan son bo'lishi kerak.");
+    return;
+  }
+  const data = store.load();
+  const sub = data.submissions.find(s => s.id === id);
+  if(!sub){ bot.sendMessage(msg.chat.id, `#${id} raqamli ish topilmadi.`); return; }
+
+  const me = data.users[String(msg.from.id)];
+  const isOwnerTeacher = me && me.role === 'teacher' && me.teacher_key === sub.teacher_key;
+  if(!isAdmin(msg.from.id) && !isOwnerTeacher){
+    bot.sendMessage(msg.chat.id, "Bu ishni faqat admin yoki shu ishga tayinlangan ustoz tahrirlashi mumkin.");
+    return;
+  }
+
+  const oldScore = sub.final_score;
+  store.update((d) => {
+    const s = d.submissions.find(x => x.id === id);
+    s.final_score = newScore;
+    s.graded_by_id = msg.from.id;
+    s.graded_at = new Date().toISOString();
+  });
+  bot.sendMessage(msg.chat.id, `✅ #${id} ish bali yangilandi: ${oldScore != null ? oldScore + ' → ' : ''}${newScore}/100`);
+  notifyStudentOfScore(id);
+});
 
 /* ---- O'quvchi uchun: FAQAT o'zining natijalari (Telegram orqali obuna tekshiruvidan o'tganlar uchun) ---- */
 bot.onText(/^\/cv$/, (msg) => handleCv(msg.chat.id, msg.from.id));
