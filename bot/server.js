@@ -105,7 +105,10 @@ function csvEscape(v){
 }
 function toCSV(rows){
   const header = ['ID', 'Sana', 'Talaba', 'Daraja/Bo\'lim', 'Toifa', 'Mavzu', 'Ball', 'Baholadi', 'Baholangan vaqt', 'Izoh'];
-  const lines = [header.map(csvEscape).join(',')];
+  // "sep=," — Excel'ga ustunlarni vergul bilan ajratishni majburlaydi. Ba'zi tillarda (shu jumladan
+  // o'zbek/rus Windows sozlamalarida) Excel vergul o'rniga nuqta-vergulni kutadi va shu direktivasiz
+  // butun qatorni bitta ustunga "yopishtirib" ochadi.
+  const lines = ['sep=,', header.map(csvEscape).join(',')];
   rows.forEach(r => {
     lines.push([
       r.id,
