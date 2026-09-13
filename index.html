@@ -1687,11 +1687,26 @@
   }
   function openArenaPopover(){
     if(currentLevel !== 'b1') return;
-    buildOptionGrid(arenaPopoverGrid, ARENA_META, currentArenaSection, (key)=>{
-      applyArenaSection(key);
-      arenaPopoverOverlay.classList.remove('open');
-    });
+    arenaPopoverGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:6px;">Tekshirilmoqda...</div>`;
     arenaPopoverOverlay.classList.add('open');
+
+    const studentTgId = getStudentTelegramId();
+    fetch(BOT_API_BASE + '/api/subscription/' + (studentTgId || '0'))
+      .then(r => r.json())
+      .catch(() => ({ tier: 'free', active: true, botLink: null })) // tarmoq xatosida bloklamaymiz
+      .then((sub) => {
+        if(!sub.active){
+          arenaPopoverGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:10px;">
+            <p style="margin:0 0 14px; font-size:14px; color:var(--ink-soft); line-height:1.5;">ARENA mavzular to'plami faqat <b>Premium</b> yoki <b>Pro</b> obuna egalari uchun ochiq.</p>
+            ${sub.botLink ? `<a href="${sub.botLink}" target="_blank" rel="noopener" class="btn primary" style="display:inline-block; text-decoration:none;">💎 Obuna sotib olish</a>` : ''}
+          </div>`;
+          return;
+        }
+        buildOptionGrid(arenaPopoverGrid, ARENA_META, currentArenaSection, (key)=>{
+          applyArenaSection(key);
+          arenaPopoverOverlay.classList.remove('open');
+        });
+      });
   }
   arenaBtn.addEventListener('click', openArenaPopover);
   arenaPopoverCloseBtn.addEventListener('click', ()=> arenaPopoverOverlay.classList.remove('open'));
@@ -2060,6 +2075,19 @@
     `;
   }
 
+  function renderQuotaPaywall(quota){
+    const botBtn = quota.botLink
+      ? `<a href="${quota.botLink}" target="_blank" rel="noopener" class="btn primary" style="display:inline-block; text-decoration:none; margin-top:10px;">💎 Botda obuna sotib olish</a>`
+      : '';
+    feedbackPanel.innerHTML = `
+      <div class="fb-error">
+        <b>Bepul limit tugadi 😔</b><br>
+        Haftalik bepul AI tekshiruv (${quota.weeklyLimit || 3} marta) tugadi.<br>
+        Cheksiz tekshiruv va qo'shimcha kitoblar uchun <b>Premium</b> yoki <b>Pro</b> obuna sotib oling.
+        ${botBtn}
+      </div>`;
+  }
+
   async function checkWithAI(){
     if(!hasFinished){
       feedbackPanel.style.display = 'block';
@@ -2072,9 +2100,30 @@
       feedbackPanel.innerHTML = `<div class="fb-error">Avval biror narsa yozing.</div>`;
       return;
     }
+
     feedbackPanel.style.display = 'block';
-    feedbackPanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Matn tekshirilmoqda...</div>`;
+    feedbackPanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Ruxsat tekshirilmoqda...</div>`;
     checkBtn.disabled = true;
+
+    const studentTgId = getStudentTelegramId();
+    let quota;
+    try{
+      const quotaRes = await fetch(BOT_API_BASE + '/api/usage/check-and-consume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentTelegramId: studentTgId })
+      });
+      quota = await quotaRes.json();
+    }catch(e){
+      quota = { allowed: true, tier: 'unknown', remaining: null, botLink: null }; // tarmoq xatosida bloklamaymiz
+    }
+    if(!quota.allowed){
+      renderQuotaPaywall(quota);
+      updateCheckBtnLockState();
+      return;
+    }
+
+    feedbackPanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Matn tekshirilmoqda...</div>`;
 
     const cat = TASKS[currentCategory];
     const pointsList = currentTask.points.map((p,i)=>`${i+1}. ${p}`).join('\n');
@@ -2409,6 +2458,9 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
   const BOT_API_BASE = 'https://prufungs-bot-production.up.railway.app';
   const TG_SUB_KEY = 'schreibenTrainer_tg_subscribed_v1';
   const STUDENT_TG_ID_KEY = 'schreibenTrainer_student_tg_id_v1';
+  function getStudentTelegramId(){
+    try{ return localStorage.getItem(STUDENT_TG_ID_KEY) || ''; }catch(e){ return ''; }
+  }
   const tgGateOverlay = document.getElementById('tgGateOverlay');
   const tgGateVerifyBtn = document.getElementById('tgGateVerifyBtn');
   const tgGateStatus = document.getElementById('tgGateStatus');
@@ -2571,7 +2623,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     const feedbackText = [parsed.summary || '', issuesToText(parsed.issues)].filter(Boolean).join('\n\n');
     const payload = {
       studentName: name,
-      studentTelegramId: (function(){ try{ return localStorage.getItem(STUDENT_TG_ID_KEY) || ''; }catch(e){ return ''; } })(),
+      studentTelegramId: getStudentTelegramId(),
       teacherKey: teacherKey || '',
       level: inArena ? ('ARENA/' + (ARENA_META[currentArenaSection] ? ARENA_META[currentArenaSection].name : currentArenaSection)) : currentLevel,
       category: cat ? cat.label : currentCategory,

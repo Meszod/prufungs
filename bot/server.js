@@ -39,6 +39,109 @@ function genTeacherKey(){
   return crypto.randomBytes(5).toString('hex');
 }
 
+/* ================= OBUNA (PREMIUM/PRO) ================= */
+const FREE_WEEKLY_LIMIT = 3;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+const TARIFFS = {
+  premium_1m: { tier: 'premium', label: 'Premium — 1 oy', days: 30 },
+  premium_3m: { tier: 'premium', label: 'Premium — 3 oy', days: 90 },
+  pro_1m: { tier: 'pro', label: 'Pro — 1 oy', days: 30 }
+};
+const DEFAULT_SETTINGS = {
+  cardNumber: '',
+  cardHolder: '',
+  prices: { premium_1m: 32000, premium_3m: 90000, pro_1m: 48999 }
+};
+
+function getSettings(){
+  const data = store.load();
+  const s = data.settings || {};
+  return {
+    cardNumber: s.cardNumber || DEFAULT_SETTINGS.cardNumber,
+    cardHolder: s.cardHolder || DEFAULT_SETTINGS.cardHolder,
+    prices: Object.assign({}, DEFAULT_SETTINGS.prices, s.prices || {})
+  };
+}
+
+function tariffPrice(tariffKey){
+  const settings = getSettings();
+  return settings.prices[tariffKey] != null ? settings.prices[tariffKey] : DEFAULT_SETTINGS.prices[tariffKey];
+}
+
+/* Obuna hali kuchdami — muddati o'tgan bo'lsa avtomatik "free" hisoblanadi. */
+function getSubscriptionInfo(telegramId){
+  const data = store.load();
+  const user = data.users[String(telegramId)];
+  const tier = user && user.subscription_tier ? user.subscription_tier : 'free';
+  const expiresAt = (user && user.subscription_expires_at) || null;
+  const active = tier !== 'free' && expiresAt && new Date(expiresAt).getTime() > Date.now();
+  return { tier: active ? tier : 'free', expiresAt, active };
+}
+
+function getWeeklyUsage(telegramId){
+  const data = store.load();
+  const user = data.users[String(telegramId)];
+  if(!user) return { count: 0 };
+  const resetAt = user.weekly_usage_reset_at ? new Date(user.weekly_usage_reset_at).getTime() : 0;
+  if(Date.now() - resetAt >= WEEK_MS) return { count: 0 };
+  return { count: user.weekly_usage_count || 0 };
+}
+
+/* Bepul foydalanuvchi uchun haftalik limitni tekshiradi va (ruxsat bo'lsa) darhol sarflaydi — bitta atomik amal. */
+function checkAndConsumeQuota(telegramId){
+  const sub = getSubscriptionInfo(telegramId);
+  if(sub.active) return { allowed: true, tier: sub.tier, remaining: null };
+
+  return store.update((data) => {
+    const key = String(telegramId);
+    if(!data.users[key]){
+      data.users[key] = {
+        telegram_id: Number(telegramId), username: null, first_name: null, role: 'student',
+        display_name: null, teacher_key: null, is_paused: false,
+        subscription_tier: 'free', subscription_expires_at: null,
+        weekly_usage_count: 0, weekly_usage_reset_at: null,
+        created_at: new Date().toISOString()
+      };
+    }
+    const user = data.users[key];
+    const resetAt = user.weekly_usage_reset_at ? new Date(user.weekly_usage_reset_at).getTime() : 0;
+    if(Date.now() - resetAt >= WEEK_MS){
+      user.weekly_usage_count = 0;
+      user.weekly_usage_reset_at = new Date().toISOString();
+    }
+    if(user.weekly_usage_count >= FREE_WEEKLY_LIMIT){
+      return { allowed: false, tier: 'free', remaining: 0 };
+    }
+    user.weekly_usage_count++;
+    return { allowed: true, tier: 'free', remaining: FREE_WEEKLY_LIMIT - user.weekly_usage_count };
+  });
+}
+
+function grantSubscription(telegramId, tariffKey){
+  const tariff = TARIFFS[tariffKey];
+  if(!tariff) return null;
+  return store.update((data) => {
+    const key = String(telegramId);
+    if(!data.users[key]){
+      data.users[key] = {
+        telegram_id: Number(telegramId), username: null, first_name: null, role: 'student',
+        display_name: null, teacher_key: null, is_paused: false,
+        created_at: new Date().toISOString()
+      };
+    }
+    const user = data.users[key];
+    const now = Date.now();
+    // Agar hozirgi obuna hali kuchda bo'lsa, muddat shundan qo'shiladi (stacking); aks holda bugundan boshlanadi.
+    const currentExpiry = user.subscription_expires_at ? new Date(user.subscription_expires_at).getTime() : 0;
+    const base = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(base + tariff.days * 24 * 60 * 60 * 1000).toISOString();
+    user.subscription_tier = tariff.tier;
+    user.subscription_expires_at = newExpiry;
+    return { tier: tariff.tier, expiresAt: newExpiry };
+  });
+}
+
 /* Ball tugmasi bosilganda "endi javob kutilmoqda" holatini saqlaydi: chatId -> {submissionId, messageId} */
 const pendingScoreEntry = new Map();
 /* Izoh yozish so'ralganda kutilayotgan holat: chatId -> submissionId */
@@ -47,6 +150,8 @@ const pendingCommentEntry = new Map();
 const pendingBroadcast = new Map();
 /* /tozalash tasdiqlanishini kutayotgan holat: chatId -> true */
 const pendingClear = new Map();
+/* To'lov jarayonida: chatId -> tariffKey (screenshot kutilmoqda) */
+const pendingPayment = new Map();
 
 /* Admin panelga noto'g'ri parol bilan ko'p urinishlarni kuzatadi: ip -> {count, lockedUntil} */
 const loginAttempts = new Map();
@@ -171,6 +276,9 @@ function promoteToTeacher(telegramId, displayName){
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 bot.on('polling_error', (err) => console.error('polling_error:', err.message));
 
+let BOT_USERNAME = null;
+bot.getMe().then((me) => { BOT_USERNAME = me.username; }).catch((err) => console.error('getMe xatolik:', err.message));
+
 const PUBLIC_BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
   ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
   : (process.env.PUBLIC_BASE_URL || null);
@@ -196,7 +304,8 @@ function mainMenuKeyboard(user, telegramId){
     ]};
   }
   return { inline_keyboard: [
-    [{ text: '📋 Mening natijalarim', callback_data: 'menu_cv' }]
+    [{ text: '📋 Mening natijalarim', callback_data: 'menu_cv' }],
+    [{ text: '💎 Premium/Pro sotib olish', callback_data: 'menu_premium' }]
   ]};
 }
 
@@ -223,7 +332,7 @@ function buildCommandLines(user, telegramId){
   } else if(user.role === 'teacher'){
     lines.push(`Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/tahrirla <id> <ball> — o\'z o\'quvchingiz ballini tuzatish', '/xabar <matn> — o\'z o\'quvchilaringizga xabar yuborish', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish', '/yordam — shu ro\'yxatni qayta ko\'rish');
   } else {
-    lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
+    lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", "/premium — Premium/Pro obuna sotib olish", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
   }
   return lines;
 }
@@ -428,6 +537,31 @@ app.get('/api/teachers/public', (req, res) => {
   res.json({ teachers });
 });
 
+/* ---- Sayt uchun: obuna holati va bepul limit qolgan sonini bilish ---- */
+app.get('/api/subscription/:telegramId', (req, res) => {
+  const sub = getSubscriptionInfo(req.params.telegramId);
+  const usage = getWeeklyUsage(req.params.telegramId);
+  res.json({
+    tier: sub.tier,
+    active: sub.active,
+    expiresAt: sub.expiresAt,
+    weeklyUsed: usage.count,
+    weeklyLimit: FREE_WEEKLY_LIMIT,
+    botLink: BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : null
+  });
+});
+
+/* ---- Sayt uchun: AI tekshiruvdan OLDIN chaqiriladi — limitni tekshiradi va (bepul bo'lsa) sarflaydi ---- */
+app.post('/api/usage/check-and-consume', (req, res) => {
+  const { studentTelegramId } = req.body || {};
+  if(!studentTelegramId){
+    // Eski (identifikatsiyasiz) sessiyalar uchun — hozircha ruxsat, lekin sanalmaydi
+    return res.json({ allowed: true, tier: 'unknown', remaining: null, botLink: BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : null });
+  }
+  const result = checkAndConsumeQuota(studentTelegramId);
+  res.json(Object.assign({}, result, { botLink: BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : null }));
+});
+
 /* ---- O'quvchi ishini yuborish: TANLANGAN ustozga + har doim adminga ---- */
 app.post('/api/submit', async (req, res) => {
   try{
@@ -544,6 +678,75 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const messageId = query.message.message_id;
 
+  if(data.startsWith('buytariff_')){
+    const tariffKey = data.slice('buytariff_'.length);
+    const tariff = TARIFFS[tariffKey];
+    if(!tariff){ await bot.answerCallbackQuery(query.id, { text: 'Noma\'lum tarif' }); return; }
+    const settings = getSettings();
+    const price = tariffPrice(tariffKey);
+    if(!settings.cardNumber){
+      await bot.answerCallbackQuery(query.id, { text: "To'lov hali sozlanmagan, admin bilan bog'laning", show_alert: true });
+      return;
+    }
+    pendingPayment.set(chatId, tariffKey);
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId,
+      `💳 <b>${tariff.label}</b>\n\nQuyidagi kartaga <b>${price.toLocaleString('ru-RU')} so'm</b> o'tkazing:\n\n` +
+      `Karta: <code>${settings.cardNumber}</code>\nEgasi: ${settings.cardHolder || '-'}\n\n` +
+      `To'lovni amalga oshirgach, chekning skrinshotini (rasm sifatida) shu yerga yuboring. Admin tez orada tasdiqlaydi.`,
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  if(data.startsWith('payconfirm_') || data.startsWith('payreject_')){
+    if(!isAdmin(query.from.id)){
+      await bot.answerCallbackQuery(query.id, { text: 'Faqat admin uchun', show_alert: true });
+      return;
+    }
+    const isConfirm = data.startsWith('payconfirm_');
+    const reqId = Number(data.slice(isConfirm ? 'payconfirm_'.length : 'payreject_'.length));
+    const payData = store.load();
+    const payReq = payData.paymentRequests.find(p => p.id === reqId);
+    if(!payReq){ await bot.answerCallbackQuery(query.id, { text: 'Topilmadi' }); return; }
+    if(payReq.status !== 'pending'){
+      await bot.answerCallbackQuery(query.id, { text: 'Bu so\'rov allaqachon ko\'rib chiqilgan' });
+      return;
+    }
+
+    if(isConfirm){
+      const granted = grantSubscription(payReq.student_telegram_id, payReq.tariff_key);
+      store.update((d) => { const p = d.paymentRequests.find(x => x.id === reqId); if(p) p.status = 'confirmed'; });
+      await bot.answerCallbackQuery(query.id, { text: 'Tasdiqlandi' });
+      try{
+        await bot.editMessageCaption(
+          `✅ TASDIQLANDI\n\n${TARIFFS[payReq.tariff_key].label} — ${payReq.student_name} (ID: ${payReq.student_telegram_id})`,
+          { chat_id: chatId, message_id: messageId }
+        );
+      }catch(e){}
+      if(granted){
+        const expiryStr = new Date(granted.expiresAt).toLocaleDateString('uz-UZ');
+        bot.sendMessage(payReq.student_telegram_id,
+          `✅ To'lovingiz tasdiqlandi!\n\n🎉 Sizga <b>${granted.tier === 'pro' ? 'Pro' : 'Premium'}</b> obuna faollashtirildi.\nAmal qilish muddati: <b>${expiryStr}</b> gacha.`,
+          { parse_mode: 'HTML' }
+        ).catch((err) => console.error('obuna xabarini yuborishda xatolik:', err.message));
+      }
+    } else {
+      store.update((d) => { const p = d.paymentRequests.find(x => x.id === reqId); if(p) p.status = 'rejected'; });
+      await bot.answerCallbackQuery(query.id, { text: 'Rad etildi' });
+      try{
+        await bot.editMessageCaption(
+          `❌ RAD ETILDI\n\n${TARIFFS[payReq.tariff_key].label} — ${payReq.student_name} (ID: ${payReq.student_telegram_id})`,
+          { chat_id: chatId, message_id: messageId }
+        );
+      }catch(e){}
+      bot.sendMessage(payReq.student_telegram_id,
+        "❌ To'lovingiz tasdiqlanmadi. Iltimos, chekni tekshirib qayta urinib ko'ring yoki admin bilan bog'laning."
+      ).catch((err) => console.error('rad etish xabarini yuborishda xatolik:', err.message));
+    }
+    return;
+  }
+
   if(data.startsWith('acceptai_')){
     const submissionId = Number(data.slice('acceptai_'.length));
     const result = gradeSubmission(submissionId, null, query.from);
@@ -609,6 +812,18 @@ bot.on('callback_query', async (query) => {
   if(data === 'menu_cv'){
     await bot.answerCallbackQuery(query.id);
     handleCv(chatId, query.from.id);
+    return;
+  }
+  if(data === 'menu_premium'){
+    await bot.answerCallbackQuery(query.id);
+    const rows = Object.keys(TARIFFS).map((key) => [{
+      text: `${TARIFFS[key].label} — ${tariffPrice(key).toLocaleString('ru-RU')} so'm`,
+      callback_data: `buytariff_${key}`
+    }]);
+    bot.sendMessage(chatId,
+      "💎 Obuna tariflari:\n\nPremium — joriy kitob (ARENA) + cheksiz AI tekshiruv.\nPro — barcha kitoblar + cheksiz AI tekshiruv.\n\nTarifni tanlang:",
+      { reply_markup: { inline_keyboard: rows } }
+    );
     return;
   }
   if(data === 'menu_toggle_pause'){
@@ -683,6 +898,45 @@ bot.on('callback_query', async (query) => {
 
 /* ---- "Ball kiritish" bosilgach kutilayotgan matnli javobni, yoki izoh matnini qabul qiladi ---- */
 bot.on('message', async (msg) => {
+  // To'lov skrinshoti (rasm) kelsa
+  if(msg.photo && msg.photo.length > 0){
+    const tariffKey = pendingPayment.get(msg.chat.id);
+    if(!tariffKey) return; // kutilmagan rasm — e'tiborsiz qoldiramiz
+    pendingPayment.delete(msg.chat.id);
+    const tariff = TARIFFS[tariffKey];
+    const price = tariffPrice(tariffKey);
+    const user = upsertUser(msg.from);
+    const fileId = msg.photo[msg.photo.length - 1].file_id; // eng katta o'lchamdagi versiyasi
+
+    const reqRecord = store.update((data) => {
+      const rec = {
+        id: data.nextPaymentRequestId++,
+        student_telegram_id: msg.from.id,
+        student_name: user.display_name || msg.from.first_name || String(msg.from.id),
+        tariff_key: tariffKey,
+        amount: price,
+        photo_file_id: fileId,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+      data.paymentRequests.push(rec);
+      return rec;
+    });
+
+    bot.sendMessage(msg.chat.id, "✅ Chek qabul qilindi. Admin tez orada tekshirib, obunangizni faollashtiradi.");
+
+    if(ADMIN_TELEGRAM_ID){
+      bot.sendPhoto(Number(ADMIN_TELEGRAM_ID), fileId, {
+        caption: `💳 Yangi to'lov so'rovi #${reqRecord.id}\n\n👤 ${reqRecord.student_name} (ID: ${msg.from.id})\n📦 ${tariff.label}\n💰 ${price.toLocaleString('ru-RU')} so'm`,
+        reply_markup: { inline_keyboard: [[
+          { text: '✅ Tasdiqlash', callback_data: `payconfirm_${reqRecord.id}` },
+          { text: '❌ Rad etish', callback_data: `payreject_${reqRecord.id}` }
+        ]] }
+      }).catch((err) => console.error('adminga chek yuborishda xatolik:', err.message));
+    }
+    return;
+  }
+
   if(!msg.text || msg.text.startsWith('/')) return; // buyruqlar alohida onText orqali ishlaydi
 
   const pendingComment = pendingCommentEntry.get(msg.chat.id);
@@ -826,6 +1080,19 @@ bot.onText(/^\/tahrirla\s+(\d+)\s+(\d+(?:[.,]\d+)?)$/, (msg, match) => {
   notifyStudentOfScore(id);
 });
 
+/* ---- /premium — obuna sotib olish oqimi ---- */
+bot.onText(/^\/premium$/, (msg) => {
+  const settings = getSettings();
+  const rows = Object.keys(TARIFFS).map((key) => [{
+    text: `${TARIFFS[key].label} — ${tariffPrice(key).toLocaleString('ru-RU')} so'm`,
+    callback_data: `buytariff_${key}`
+  }]);
+  bot.sendMessage(msg.chat.id,
+    "💎 Obuna tariflari:\n\nPremium — joriy kitob (ARENA) + cheksiz AI tekshiruv.\nPro — barcha kitoblar + cheksiz AI tekshiruv.\n\nTarifni tanlang:",
+    { reply_markup: { inline_keyboard: rows } }
+  );
+});
+
 /* ---- O'quvchi uchun: FAQAT o'zining natijalari (Telegram orqali obuna tekshiruvidan o'tganlar uchun) ---- */
 bot.onText(/^\/cv$/, (msg) => handleCv(msg.chat.id, msg.from.id));
 function handleCv(chatId, fromId){
@@ -938,7 +1205,34 @@ app.get('/api/admin/overview', requireAdmin, (req, res) => {
   const candidates = users
     .filter(u => u.role === 'student')
     .map(u => ({ telegram_id: u.telegram_id, username: u.username, first_name: u.first_name }));
-  res.json({ teachers, candidates, submissionsCount: data.submissions.length });
+  const pendingPayments = data.paymentRequests.filter(p => p.status === 'pending').length;
+  const activeSubscribers = users.filter(u => {
+    const sub = getSubscriptionInfo(u.telegram_id);
+    return sub.active;
+  }).length;
+  res.json({ teachers, candidates, submissionsCount: data.submissions.length, pendingPayments, activeSubscribers });
+});
+
+/* ---- To'lov sozlamalari: karta, egasi, narxlar — admin panelidan tahrirlanadi ---- */
+app.get('/api/admin/settings', requireAdmin, (req, res) => {
+  res.json(getSettings());
+});
+app.post('/api/admin/settings', requireAdmin, (req, res) => {
+  const { cardNumber, cardHolder, prices } = req.body || {};
+  const updated = store.update((data) => {
+    data.settings = data.settings || {};
+    if(cardNumber != null) data.settings.cardNumber = String(cardNumber).trim().slice(0, 40);
+    if(cardHolder != null) data.settings.cardHolder = String(cardHolder).trim().slice(0, 100);
+    if(prices && typeof prices === 'object'){
+      data.settings.prices = Object.assign({}, data.settings.prices, {
+        premium_1m: Number(prices.premium_1m) || DEFAULT_SETTINGS.prices.premium_1m,
+        premium_3m: Number(prices.premium_3m) || DEFAULT_SETTINGS.prices.premium_3m,
+        pro_1m: Number(prices.pro_1m) || DEFAULT_SETTINGS.prices.pro_1m
+      });
+    }
+    return data.settings;
+  });
+  res.json({ ok: true, settings: getSettings() });
 });
 
 app.post('/api/admin/teachers', requireAdmin, async (req, res) => {

@@ -12,7 +12,15 @@ const path = require('path');
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'app.json');
 
 function emptyState(){
-  return { users: {}, verifySessions: {}, submissions: [], nextSubmissionId: 1 };
+  return {
+    users: {},
+    verifySessions: {},
+    submissions: [],
+    nextSubmissionId: 1,
+    paymentRequests: [],
+    nextPaymentRequestId: 1,
+    settings: {}
+  };
 }
 
 function load(){

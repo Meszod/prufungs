@@ -56,6 +56,30 @@
   </div>
 
   <div class="card">
+    <h2>💳 To'lov sozlamalari</h2>
+    <p class="sub" style="margin:0 0 12px;">Botda o'quvchilarga ko'rsatiladigan karta va tarif narxlari.</p>
+    <input type="text" id="cardNumberInput" placeholder="Karta raqami (masalan: 8600 1234 5678 9012)">
+    <input type="text" id="cardHolderInput" placeholder="Karta egasining ismi">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div>
+        <label class="sub" style="display:block; margin-bottom:4px;">Premium — 1 oy (so'm)</label>
+        <input type="number" id="premium1mInput" placeholder="32000">
+      </div>
+      <div>
+        <label class="sub" style="display:block; margin-bottom:4px;">Premium — 3 oy (so'm)</label>
+        <input type="number" id="premium3mInput" placeholder="90000">
+      </div>
+      <div>
+        <label class="sub" style="display:block; margin-bottom:4px;">Pro — 1 oy (so'm)</label>
+        <input type="number" id="pro1mInput" placeholder="48999">
+      </div>
+    </div>
+    <button class="btn-primary" id="saveSettingsBtn" style="margin-top:6px;">Saqlash</button>
+    <div class="err" id="settingsErr"></div>
+    <div class="sub" id="settingsSavedMsg" style="color:var(--accent); display:none; margin-top:8px;">✅ Saqlandi</div>
+  </div>
+
+  <div class="card">
     <h2>Yangi ustoz qo'shish</h2>
     <p class="sub" style="margin:0 0 12px;">Ustoz avval botga <b>/start</b> bosishi kerak — shundan keyin u pastdagi "Kutilayotganlar" ro'yxatida chiqadi.</p>
     <select id="candidateSelect"></select>
@@ -97,6 +121,45 @@
     document.getElementById('appScreen').style.display = 'block';
   }
 
+  async function loadSettings(){
+    try{
+      const res = await fetch(API_BASE + '/api/admin/settings', { headers: authHeaders() });
+      if(!res.ok) return;
+      const s = await res.json();
+      document.getElementById('cardNumberInput').value = s.cardNumber || '';
+      document.getElementById('cardHolderInput').value = s.cardHolder || '';
+      document.getElementById('premium1mInput').value = s.prices.premium_1m || '';
+      document.getElementById('premium3mInput').value = s.prices.premium_3m || '';
+      document.getElementById('pro1mInput').value = s.prices.pro_1m || '';
+    }catch(e){ /* jim */ }
+  }
+
+  document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+    const errEl = document.getElementById('settingsErr');
+    const savedMsg = document.getElementById('settingsSavedMsg');
+    errEl.textContent = '';
+    savedMsg.style.display = 'none';
+    const payload = {
+      cardNumber: document.getElementById('cardNumberInput').value.trim(),
+      cardHolder: document.getElementById('cardHolderInput').value.trim(),
+      prices: {
+        premium_1m: document.getElementById('premium1mInput').value,
+        premium_3m: document.getElementById('premium3mInput').value,
+        pro_1m: document.getElementById('pro1mInput').value
+      }
+    };
+    try{
+      const res = await fetch(API_BASE + '/api/admin/settings', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(payload)
+      });
+      if(!res.ok){ errEl.textContent = 'Saqlashda xatolik.'; return; }
+      savedMsg.style.display = 'block';
+      setTimeout(()=> savedMsg.style.display = 'none', 2500);
+    }catch(e){
+      errEl.textContent = 'Saqlashda xatolik.';
+    }
+  });
+
   async function loadOverview(){
     const res = await fetch(API_BASE + '/api/admin/overview', { headers: authHeaders() });
     if(!res.ok) throw new Error('Yuklashda xato');
@@ -106,7 +169,7 @@
 
   function render(data){
     document.getElementById('statsLine').textContent =
-      `${data.teachers.length} ta ustoz · ${data.candidates.length} ta kutilayotgan · ${data.submissionsCount} ta yuborilgan ish`;
+      `${data.teachers.length} ta ustoz · ${data.candidates.length} ta kutilayotgan · ${data.submissionsCount} ta yuborilgan ish · ${data.activeSubscribers || 0} ta faol obunachi${data.pendingPayments ? ' · ⏳ ' + data.pendingPayments + ' ta to\'lov kutmoqda' : ''}`;
 
     const candSelect = document.getElementById('candidateSelect');
     candSelect.innerHTML = data.candidates.length
@@ -169,6 +232,7 @@
       const data = await login(pass);
       showApp();
       render(data);
+      loadSettings();
     }catch(e){
       document.getElementById('loginErr').textContent = e.message;
     }
@@ -212,7 +276,7 @@
 
   // Agar parol sessionStorage'da saqlangan bo'lsa, avtomatik kirish
   if(PASSWORD){
-    login(PASSWORD).then(data=>{ showApp(); render(data); }).catch(()=>{ sessionStorage.removeItem('adminPassword'); });
+    login(PASSWORD).then(data=>{ showApp(); render(data); loadSettings(); }).catch(()=>{ sessionStorage.removeItem('adminPassword'); });
   }
 </script>
 </body>
