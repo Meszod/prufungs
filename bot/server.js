@@ -371,6 +371,20 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     return;
   }
 
+  if(payload === 'buypremium' || payload === 'buypro'){
+    const wantTier = payload === 'buypremium' ? 'premium' : 'pro';
+    const keys = Object.keys(TARIFFS).filter((key) => TARIFFS[key].tier === wantTier);
+    const rows = keys.map((key) => [{
+      text: `${TARIFFS[key].label} — ${tariffPrice(key).toLocaleString('ru-RU')} so'm`,
+      callback_data: `buytariff_${key}`
+    }]);
+    await bot.sendMessage(chatId,
+      `💎 <b>${wantTier === 'pro' ? 'Pro' : 'Premium'}</b> tarifini tanladingiz. Muddatni tanlang:`,
+      { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } }
+    );
+    return;
+  }
+
   const lines = [
     `Salom, ${msg.from.first_name || ''}! 👋`,
     ``,
@@ -525,6 +539,12 @@ app.get('/api/verify/status/:sessionId', (req, res) => {
     return res.json({ status: 'expired' });
   }
   res.json({ status: session.status, telegramId: session.telegram_id || null });
+});
+
+/* ---- Sayt uchun ochiq: joriy narxlar (admin panelda o'zgartirilsa, sayt avtomatik yangi narxni ko'rsatadi) ---- */
+app.get('/api/plans/public', (req, res) => {
+  const settings = getSettings();
+  res.json({ prices: settings.prices, botLink: BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : null });
 });
 
 /* ---- Sayt uchun ochiq (auth talab qilmaydigan) ustozlar ro'yxati ---- */

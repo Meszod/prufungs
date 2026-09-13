@@ -231,6 +231,48 @@
 
   .level-modal-overlay.open, .level-popover-overlay.open{ display:flex; }
 
+  @keyframes modalPopIn{
+    from{ opacity:0; transform:scale(0.93) translateY(10px); }
+    to{ opacity:1; transform:scale(1) translateY(0); }
+  }
+  .level-modal-overlay.open .level-modal,
+  .level-popover-overlay.open .level-popover{
+    animation: modalPopIn .3s cubic-bezier(.22,1,.36,1);
+  }
+  .level-popover.wide{ max-width:780px; }
+
+  .paywall-plans{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin:16px 0 6px; }
+  .plan-card{
+    border:1.5px solid var(--paper-line); border-radius:6px; padding:18px 16px 16px; background:var(--paper);
+    display:flex; flex-direction:column; position:relative;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .plan-card:hover{ transform:translateY(-4px); box-shadow:0 10px 26px rgba(28,37,65,0.14); }
+  .plan-card.featured{ border-color:var(--gold); box-shadow:0 6px 22px rgba(156,123,46,0.2); }
+  .plan-badge{
+    position:absolute; top:-11px; left:50%; transform:translateX(-50%);
+    background:var(--gold); color:#fff; font-size:10px; font-weight:700; letter-spacing:.04em;
+    padding:3px 11px; border-radius:20px; white-space:nowrap;
+    animation: badgePulse 2.2s ease-in-out infinite;
+  }
+  @keyframes badgePulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(156,123,46,0.4); }
+    50%{ box-shadow:0 0 0 6px rgba(156,123,46,0); }
+  }
+  .plan-name{ font-family:'Fraunces', serif; font-weight:600; font-size:16.5px; margin-bottom:3px; }
+  .plan-price{ font-size:19px; font-weight:700; color:var(--ink); margin-bottom:12px; }
+  .plan-price span{ font-size:10.5px; font-weight:400; color:var(--ink-soft); }
+  .plan-features{ list-style:none; padding:0; margin:0 0 16px; font-size:12px; color:var(--ink-faint); line-height:1.85; flex:1; }
+  .plan-features li.on{ color:var(--ink); }
+  .plan-select-btn{
+    border:none; border-radius:3px; padding:10px 12px; font-size:12.5px; font-weight:600; cursor:pointer;
+    background:var(--ink); color:#fff; transition:transform .15s ease, background .15s ease; width:100%;
+  }
+  .plan-select-btn:hover{ transform:translateY(-1px); background:var(--green); }
+  .plan-card.featured .plan-select-btn{ background:var(--gold); }
+  .plan-card.featured .plan-select-btn:hover{ background:#b28b39; }
+  @media (max-width:640px){ .paywall-plans{ grid-template-columns:1fr; } .level-popover.wide{ max-width:480px; } }
+
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
   .task-col{ display:flex; flex-direction:column; }
@@ -605,8 +647,8 @@
 </div>
 
 <div class="level-popover-overlay" id="arenaPopoverOverlay">
-  <div class="level-popover">
-    <div class="level-popover-title">ARENA — bo'limni tanlang</div>
+  <div class="level-popover" id="arenaPopoverBox">
+    <div class="level-popover-title" id="arenaPopoverTitle">ARENA — bo'limni tanlang</div>
     <div class="level-modal-grid" id="arenaPopoverGrid"></div>
     <button class="btn" id="arenaPopoverCloseBtn" style="margin-top:10px; width:100%;">Bekor qilish</button>
   </div>
@@ -1590,6 +1632,8 @@
   const arenaBtn = document.getElementById('arenaBtn');
   const arenaBadgeSub = document.getElementById('arenaBadgeSub');
   const arenaPopoverOverlay = document.getElementById('arenaPopoverOverlay');
+  const arenaPopoverBox = document.getElementById('arenaPopoverBox');
+  const arenaPopoverTitle = document.getElementById('arenaPopoverTitle');
   const arenaPopoverGrid = document.getElementById('arenaPopoverGrid');
   const arenaPopoverCloseBtn = document.getElementById('arenaPopoverCloseBtn');
 
@@ -1685,8 +1729,68 @@
     pickTask(true);
     closeSidePanels();
   }
+  let plansCache = null;
+  function fetchPlans(){
+    if(plansCache) return Promise.resolve(plansCache);
+    return fetch(BOT_API_BASE + '/api/plans/public')
+      .then(r => r.json())
+      .then(p => { plansCache = p; return p; })
+      .catch(() => ({ prices: { premium_1m: 32000, premium_3m: 90000, pro_1m: 48999 }, botLink: null }));
+  }
+
+  function pricingCardsHTML(prices, botLink){
+    const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
+    const premiumLink = botLink ? `${botLink}?start=buypremium` : null;
+    const proLink = botLink ? `${botLink}?start=buypro` : null;
+    const btn = (link, cls) => link
+      ? `<a href="${link}" target="_blank" rel="noopener" class="plan-select-btn ${cls}" style="text-decoration:none; display:block; text-align:center;">Tanlash</a>`
+      : `<button class="plan-select-btn" disabled>Tez orada</button>`;
+    return `
+      <div class="paywall-plans">
+        <div class="plan-card">
+          <div class="plan-name">Bepul</div>
+          <div class="plan-price">0 <span>so'm</span></div>
+          <ul class="plan-features">
+            <li class="on">✅ A1–C2 mavzular</li>
+            <li class="on">✅ Haftasiga 3 AI tekshiruv</li>
+            <li>❌ ARENA / yangi kitoblar</li>
+            <li class="on">✅ Ustozga yuborish</li>
+            <li>➖ Reyting yo'q</li>
+          </ul>
+        </div>
+        <div class="plan-card featured">
+          <div class="plan-badge">Tavsiya etiladi</div>
+          <div class="plan-name">Premium</div>
+          <div class="plan-price">${fmt(prices.premium_1m)} <span>so'm/oy</span></div>
+          <ul class="plan-features">
+            <li class="on">✅ A1–C2 mavzular</li>
+            <li class="on">✅ Cheksiz AI tekshiruv</li>
+            <li class="on">✅ Joriy kitob (ARENA)</li>
+            <li class="on">✅ Ustozga yuborish</li>
+            <li class="on">✅ Asosiy reyting</li>
+          </ul>
+          ${btn(premiumLink, '')}
+        </div>
+        <div class="plan-card">
+          <div class="plan-name">Pro</div>
+          <div class="plan-price">${fmt(prices.pro_1m)} <span>so'm/oy</span></div>
+          <ul class="plan-features">
+            <li class="on">✅ A1–C2 mavzular</li>
+            <li class="on">✅ Cheksiz AI tekshiruv</li>
+            <li class="on">✅ Barcha kitoblar</li>
+            <li class="on">✅ Ustuvor ko'rib chiqish</li>
+            <li class="on">✅ To'liq shaxsiy tahlil</li>
+          </ul>
+          ${btn(proLink, '')}
+        </div>
+      </div>`;
+  }
+
   function openArenaPopover(){
     if(currentLevel !== 'b1') return;
+    arenaPopoverBox.classList.remove('wide');
+    arenaPopoverGrid.style.display = '';
+    arenaPopoverTitle.textContent = "ARENA — bo'limni tanlang";
     arenaPopoverGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:6px;">Tekshirilmoqda...</div>`;
     arenaPopoverOverlay.classList.add('open');
 
@@ -1696,10 +1800,12 @@
       .catch(() => ({ tier: 'free', active: true, botLink: null })) // tarmoq xatosida bloklamaymiz
       .then((sub) => {
         if(!sub.active){
-          arenaPopoverGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:10px;">
-            <p style="margin:0 0 14px; font-size:14px; color:var(--ink-soft); line-height:1.5;">ARENA mavzular to'plami faqat <b>Premium</b> yoki <b>Pro</b> obuna egalari uchun ochiq.</p>
-            ${sub.botLink ? `<a href="${sub.botLink}" target="_blank" rel="noopener" class="btn primary" style="display:inline-block; text-decoration:none;">💎 Obuna sotib olish</a>` : ''}
-          </div>`;
+          fetchPlans().then((plans) => {
+            arenaPopoverTitle.textContent = "🔒 ARENA — Premium yoki Pro kerak";
+            arenaPopoverBox.classList.add('wide');
+            arenaPopoverGrid.style.display = 'block';
+            arenaPopoverGrid.innerHTML = pricingCardsHTML(plans.prices, plans.botLink || sub.botLink);
+          });
           return;
         }
         buildOptionGrid(arenaPopoverGrid, ARENA_META, currentArenaSection, (key)=>{
@@ -2076,16 +2182,16 @@
   }
 
   function renderQuotaPaywall(quota){
-    const botBtn = quota.botLink
-      ? `<a href="${quota.botLink}" target="_blank" rel="noopener" class="btn primary" style="display:inline-block; text-decoration:none; margin-top:10px;">💎 Botda obuna sotib olish</a>`
-      : '';
     feedbackPanel.innerHTML = `
-      <div class="fb-error">
+      <div class="fb-error" style="margin-bottom:6px;">
         <b>Bepul limit tugadi 😔</b><br>
-        Haftalik bepul AI tekshiruv (${quota.weeklyLimit || 3} marta) tugadi.<br>
-        Cheksiz tekshiruv va qo'shimcha kitoblar uchun <b>Premium</b> yoki <b>Pro</b> obuna sotib oling.
-        ${botBtn}
+        Haftalik bepul AI tekshiruv (${quota.weeklyLimit || 3} marta) tugadi. Davom etish uchun tarif tanlang:
       </div>`;
+    fetchPlans().then((plans) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = pricingCardsHTML(plans.prices, plans.botLink || quota.botLink);
+      feedbackPanel.appendChild(wrap.firstElementChild);
+    });
   }
 
   async function checkWithAI(){
@@ -2466,7 +2572,11 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
   const tgGateStatus = document.getElementById('tgGateStatus');
 
   function isTgSubscribed(){
-    try{ return localStorage.getItem(TG_SUB_KEY) === '1'; }catch(e){ return false; }
+    try{
+      // Faqat "obuna tasdiqlangan" belgisi kifoya emas — Telegram ID ham saqlangan bo'lishi shart,
+      // aks holda sayt obuna/limit holatini hech qachon bila olmaydi (eski sessiyalarda shu yetishmasdi).
+      return localStorage.getItem(TG_SUB_KEY) === '1' && !!localStorage.getItem(STUDENT_TG_ID_KEY);
+    }catch(e){ return false; }
   }
   function markTgSubscribed(){
     try{ localStorage.setItem(TG_SUB_KEY, '1'); }catch(e){}
