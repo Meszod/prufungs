@@ -273,6 +273,17 @@
   .plan-card.featured .plan-select-btn:hover{ background:#b28b39; }
   @media (max-width:640px){ .paywall-plans{ grid-template-columns:1fr; } .level-popover.wide{ max-width:480px; } }
 
+  .sub-status-badge{
+    display:inline-flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12.5px;
+    padding:7px 14px; border-radius:20px; margin:0 0 16px;
+    border:1.5px solid var(--paper-line); background:var(--card); color:var(--ink-soft);
+  }
+  .sub-status-badge.premium{ border-color:var(--gold); background:rgba(156,123,46,0.08); color:var(--ink); }
+  .sub-status-badge.pro{ border-color:var(--green); background:rgba(62,122,92,0.09); color:var(--ink); }
+  .sub-status-badge b{ color:var(--ink); }
+  .sub-status-badge .upgrade-link{ color:var(--gold); font-weight:600; text-decoration:none; cursor:pointer; }
+  .sub-status-badge .upgrade-link:hover{ text-decoration:underline; }
+
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
   .task-col{ display:flex; flex-direction:column; }
@@ -533,6 +544,7 @@
 
 <main>
   <p class="intro-note" id="introNote">Bu vosita nemis tili <b>B1 darajasidagi Schreiben (yozish)</b> qismini haqiqiy imtihon formatida mashq qilish uchun. Pastda mavzu (Aufgabe) tanlang, taymerni ishga tushiring va yozishni boshlang — gaplar va so'zlar soni real vaqtda hisoblanadi.</p>
+  <div id="subStatusBadge" class="sub-status-badge" style="display:none;"></div>
 
   <div class="tabs-row">
     <div class="tabs" id="tabs"></div>
@@ -1786,6 +1798,17 @@
       </div>`;
   }
 
+  function openPricingModal(botLinkFallback){
+    arenaPopoverBox.classList.add('wide');
+    arenaPopoverTitle.textContent = "💎 Obuna tariflari";
+    arenaPopoverGrid.style.display = 'block';
+    arenaPopoverGrid.innerHTML = `<div style="text-align:center; padding:6px;">Yuklanmoqda...</div>`;
+    arenaPopoverOverlay.classList.add('open');
+    fetchPlans().then((plans) => {
+      arenaPopoverGrid.innerHTML = pricingCardsHTML(plans.prices, plans.botLink || botLinkFallback || null);
+    });
+  }
+
   function openArenaPopover(){
     if(currentLevel !== 'b1') return;
     arenaPopoverBox.classList.remove('wide');
@@ -1800,12 +1823,8 @@
       .catch(() => ({ tier: 'free', active: true, botLink: null })) // tarmoq xatosida bloklamaymiz
       .then((sub) => {
         if(!sub.active){
-          fetchPlans().then((plans) => {
-            arenaPopoverTitle.textContent = "🔒 ARENA — Premium yoki Pro kerak";
-            arenaPopoverBox.classList.add('wide');
-            arenaPopoverGrid.style.display = 'block';
-            arenaPopoverGrid.innerHTML = pricingCardsHTML(plans.prices, plans.botLink || sub.botLink);
-          });
+          arenaPopoverTitle.textContent = "🔒 ARENA — Premium yoki Pro kerak";
+          openPricingModal(sub.botLink);
           return;
         }
         buildOptionGrid(arenaPopoverGrid, ARENA_META, currentArenaSection, (key)=>{
@@ -1815,6 +1834,32 @@
       });
   }
   arenaBtn.addEventListener('click', openArenaPopover);
+
+  /* Foydalanuvchi hamma joyda o'z obuna holatini ko'rishi uchun — nomi va tugash sanasi bilan. */
+  const subStatusBadge = document.getElementById('subStatusBadge');
+  function refreshSubscriptionBadge(){
+    const tgId = getStudentTelegramId();
+    if(!tgId){ subStatusBadge.style.display = 'none'; return; }
+    fetch(BOT_API_BASE + '/api/subscription/' + tgId)
+      .then(r => r.json())
+      .then((sub) => {
+        subStatusBadge.style.display = 'inline-flex';
+        if(sub.tier === 'premium' || sub.tier === 'pro'){
+          const d = new Date(sub.expiresAt);
+          const dateStr = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+          subStatusBadge.className = 'sub-status-badge ' + sub.tier;
+          subStatusBadge.innerHTML = `${sub.tier === 'pro' ? '🚀 Pro' : '💎 Premium'} obuna — <b>${dateStr}</b> gacha amal qiladi`;
+        } else {
+          subStatusBadge.className = 'sub-status-badge';
+          const used = sub.weeklyUsed != null ? sub.weeklyUsed : 0;
+          const limit = sub.weeklyLimit || 3;
+          subStatusBadge.innerHTML = `Bepul reja — haftalik AI tekshiruv: <b>${used}/${limit}</b> ishlatilgan · <a href="#" class="upgrade-link" id="upgradeLinkInline">Premium olish →</a>`;
+          const link = document.getElementById('upgradeLinkInline');
+          if(link) link.addEventListener('click', (e) => { e.preventDefault(); openPricingModal(sub.botLink); });
+        }
+      })
+      .catch(() => { subStatusBadge.style.display = 'none'; });
+  }
   arenaPopoverCloseBtn.addEventListener('click', ()=> arenaPopoverOverlay.classList.remove('open'));
   arenaPopoverOverlay.addEventListener('click', (e)=>{ if(e.target === arenaPopoverOverlay) arenaPopoverOverlay.classList.remove('open'); });
 
@@ -2226,8 +2271,10 @@
     if(!quota.allowed){
       renderQuotaPaywall(quota);
       updateCheckBtnLockState();
+      refreshSubscriptionBadge();
       return;
     }
+    refreshSubscriptionBadge();
 
     feedbackPanel.innerHTML = `<div class="fb-loading"><div class="fb-spinner"></div>Matn tekshirilmoqda...</div>`;
 
@@ -2530,6 +2577,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
       updateCounts();
       renderTimer();
       openLevelModal();
+      refreshSubscriptionBadge();
       return;
     }
 
@@ -2555,6 +2603,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
 
     updateCounts();
     renderTimer();
+    refreshSubscriptionBadge();
   }
 
   /* ================= TELEGRAM KANALGA OBUNA (GATE) — HAQIQIY TEKSHIRUV =================
