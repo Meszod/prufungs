@@ -2295,7 +2295,9 @@ Qoidalar:
 - "wrong" maydoni albatta o'quvchi matnidan olingan HAQIQIY parcha bo'lsin, o'zing to'qib chiqarma.
 - Matnda haqiqatan mavjud bo'lgan xatolarning aksariyatini toping (kamida bo'lsa ham eng muhimlarini), lekin 10 tadan oshirmang — eng muhim xatolardan boshlab tartibla.
 - Agar matn juda toza bo'lsa, "issues" bo'sh massiv qoldirilsin va buni "summary"da ijobiy ta'kidla.
-- Ohang: halol lekin konstruktiv va rag'batlantiruvchi — bu til o'rganuvchisi, uni tanqid qilish emas, o'rgatish maqsadida tushuntir.`;
+- Ohang: halol lekin konstruktiv va rag'batlantiruvchi — bu til o'rganuvchisi, uni tanqid qilish emas, o'rgatish maqsadida tushuntir.
+- MUHIM: "score" ustunlarni bajarish darajasiga (Leitpunkte qamrovi, so'z soni maqsadga yaqinligi, matn haqiqatan mazmunli va mavzuga oid ekanligi) asoslanishi SHART, faqat "grammatik xato yo'q" degan mezonga emas.
+- Agar matn juda qisqa (talab qilingan so'z sonining yarmidan kam), mazmunsiz, tasodifiy harflar/belgilar to'plami, yoki mavzuga umuman aloqasi bo'lmasa — "score" 15 dan OSHMASIN, "xatolar yo'q" degan bahona bilan yuqori ball berma. Bunday holatda buni "summary"da aniq tushuntir.`;
 
     const userPrompt = `Aufgabe (${cat.label}): ${currentTask.title}
 Kontext: ${currentTask.context}
@@ -2329,6 +2331,19 @@ ${text}
         // Vaqtinchalik xato (masalan javob kesilib qolgan/JSON buzilgan) bo'lsa, bir marta qayta urinamiz
         parsed = await callAI();
       }
+
+      // Zaxira tekshiruv: AI xato qilib, mazmunsiz/juda qisqa matnga yuqori ball bersa ham,
+      // bu yerda avtomatik tuzatiladi — AI'ga ishonib qolmaymiz.
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      const targetWords = cat.target || 0;
+      if(typeof parsed.score === 'number' && targetWords > 0 && wordCount < targetWords * 0.3){
+        const cappedScore = Math.min(parsed.score, 15);
+        if(cappedScore < parsed.score){
+          parsed.score = cappedScore;
+          parsed.summary = `⚠️ Matn juda qisqa (maqsad: ~${targetWords} so'z, siz: ${wordCount} so'z yozdingiz) — shu sababli ball avtomatik pasaytirildi.\n\n${parsed.summary || ''}`;
+        }
+      }
+
       renderFeedback(parsed);
       if(typeof parsed.score === 'number'){
         addHistoryEntry({
