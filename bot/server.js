@@ -118,9 +118,7 @@ function checkAndConsumeQuota(telegramId){
   });
 }
 
-function grantSubscription(telegramId, tariffKey){
-  const tariff = TARIFFS[tariffKey];
-  if(!tariff) return null;
+function extendSubscription(telegramId, tier, days){
   return store.update((data) => {
     const key = String(telegramId);
     if(!data.users[key]){
@@ -135,11 +133,17 @@ function grantSubscription(telegramId, tariffKey){
     // Agar hozirgi obuna hali kuchda bo'lsa, muddat shundan qo'shiladi (stacking); aks holda bugundan boshlanadi.
     const currentExpiry = user.subscription_expires_at ? new Date(user.subscription_expires_at).getTime() : 0;
     const base = currentExpiry > now ? currentExpiry : now;
-    const newExpiry = new Date(base + tariff.days * 24 * 60 * 60 * 1000).toISOString();
-    user.subscription_tier = tariff.tier;
+    const newExpiry = new Date(base + days * 24 * 60 * 60 * 1000).toISOString();
+    user.subscription_tier = tier;
     user.subscription_expires_at = newExpiry;
-    return { tier: tariff.tier, expiresAt: newExpiry };
+    return { tier, expiresAt: newExpiry };
   });
+}
+
+function grantSubscription(telegramId, tariffKey){
+  const tariff = TARIFFS[tariffKey];
+  if(!tariff) return null;
+  return extendSubscription(telegramId, tariff.tier, tariff.days);
 }
 
 /* Ball tugmasi bosilganda "endi javob kutilmoqda" holatini saqlaydi: chatId -> {submissionId, messageId} */
@@ -305,7 +309,8 @@ function mainMenuKeyboard(user, telegramId){
   }
   return { inline_keyboard: [
     [{ text: '📋 Mening natijalarim', callback_data: 'menu_cv' }],
-    [{ text: '💎 Premium/Pro sotib olish', callback_data: 'menu_premium' }]
+    [{ text: '💎 Premium/Pro sotib olish', callback_data: 'menu_premium' }],
+    [{ text: "🔗 Do'st taklif qilish", callback_data: 'menu_referal' }]
   ]};
 }
 
@@ -332,7 +337,7 @@ function buildCommandLines(user, telegramId){
   } else if(user.role === 'teacher'){
     lines.push(`Siz ustoz sifatida ro'yxatdan o'tgansiz${user.display_name ? ' (' + user.display_name + ')' : ''}. Sizni tanlagan o'quvchilarning Schreiben ishlari shu yerga keladi.`, '', 'Buyruqlar:', '/jadval — so\'nggi baholangan ishlaringiz', '/reyting — o\'quvchilaringiz reytingi', '/export — o\'z natijalaringiz CSV', '/tahrirla <id> <ball> — o\'z o\'quvchingiz ballini tuzatish', '/xabar <matn> — o\'z o\'quvchilaringizga xabar yuborish', '/pauza — vaqtincha yangi ish qabul qilmaslik', '/faol — qayta faollashish', '/yordam — shu ro\'yxatni qayta ko\'rish');
   } else {
-    lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", "/premium — Premium/Pro obuna sotib olish", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
+    lines.push('Agar ustoz bo\'lsangiz, shu ID raqamni Adminga yuboring — u sizni ustoz sifatida qo\'shadi.', '', "Schreiben yozib saytda tekshirtirgach, /cv buyrug'i orqali o'z natijalaringizni shu yerdan ko'rishingiz mumkin.", "/premium — Premium/Pro obuna sotib olish", "/referal — do'st taklif qilib bepul obuna oling", '/yordam — buyruqlar ro\'yxatini qayta ko\'rish');
   }
   return lines;
 }
@@ -383,6 +388,20 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
       { parse_mode: 'HTML', reply_markup: { inline_keyboard: rows } }
     );
     return;
+  }
+
+  if(payload && /^ref\d+$/.test(payload)){
+    const referrerId = Number(payload.slice(3));
+    if(referrerId !== msg.from.id){
+      store.update((data) => {
+        const key = String(msg.from.id);
+        // Faqat birinchi marta belgilanadi — keyinroq boshqa havola orqali kirsa ham o'zgarmaydi.
+        if(data.users[key] && !data.users[key].referred_by){
+          data.users[key].referred_by = referrerId;
+        }
+      });
+    }
+    // Pastda oddiy /start xabari bilan davom etiladi (return yo'q).
   }
 
   const lines = [
@@ -630,6 +649,41 @@ app.post('/api/submit', async (req, res) => {
       if(data.submissions.length > 500) data.submissions = data.submissions.slice(-500);
     });
 
+    // Referal tizimi: agar bu o'quvchining ILK ishi bo'lsa va uni kimdir taklif qilgan bo'lsa,
+    // referrer hisobiga "faol do'st" qo'shiladi. Har REFERRALS_PER_REWARD tadan keyin mukofot beriladi.
+    if(submission.student_telegram_id){
+      const isFirstEver = !dupData.submissions.some(s => String(s.student_telegram_id) === String(submission.student_telegram_id));
+      if(isFirstEver){
+        const referrerId = (dupData.users[String(submission.student_telegram_id)] || {}).referred_by;
+        if(referrerId){
+          const refResult = store.update((data) => {
+            const refKey = String(referrerId);
+            const refUser = data.users[refKey];
+            if(!refUser) return null;
+            refUser.referred_qualified = refUser.referred_qualified || [];
+            if(refUser.referred_qualified.includes(Number(submission.student_telegram_id))) return null; // ikki marta hisoblanmasin
+            refUser.referred_qualified.push(Number(submission.student_telegram_id));
+            return { count: refUser.referred_qualified.length, shouldReward: refUser.referred_qualified.length % REFERRALS_PER_REWARD === 0 };
+          });
+          if(refResult){
+            bot.sendMessage(Number(referrerId),
+              `🎉 Yangi do'stingiz birinchi Schreiben ishini yozdi! (${refResult.count}/${REFERRALS_PER_REWARD === refResult.count ? REFERRALS_PER_REWARD : Math.ceil(refResult.count / REFERRALS_PER_REWARD) * REFERRALS_PER_REWARD})`
+            ).catch((err) => console.error('referal xabarida xatolik:', err.message));
+            if(refResult.shouldReward){
+              const granted = grantSubscription(referrerId, REFERRAL_REWARD_TARIFF);
+              if(granted){
+                const expiryStr = new Date(granted.expiresAt).toLocaleDateString('uz-UZ');
+                bot.sendMessage(Number(referrerId),
+                  `🎁 Tabriklaymiz! ${REFERRALS_PER_REWARD} ta do'stingiz faollashdi — sizga <b>1 oy Premium BEPUL</b> berildi!\nAmal qilish muddati: <b>${expiryStr}</b> gacha.`,
+                  { parse_mode: 'HTML' }
+                ).catch((err) => console.error('referal mukofoti xabarida xatolik:', err.message));
+              }
+            }
+          }
+        }
+      }
+    }
+
     const data = store.load();
     const targetTeacher = teacherKey
       ? Object.values(data.users).find(u => u.role === 'teacher' && u.teacher_key === teacherKey)
@@ -844,6 +898,11 @@ bot.on('callback_query', async (query) => {
       "💎 Obuna tariflari:\n\nPremium — joriy kitob (ARENA) + cheksiz AI tekshiruv.\nPro — barcha kitoblar + cheksiz AI tekshiruv.\n\nTarifni tanlang:",
       { reply_markup: { inline_keyboard: rows } }
     );
+    return;
+  }
+  if(data === 'menu_referal'){
+    await bot.answerCallbackQuery(query.id);
+    handleReferral(chatId, query.from.id);
     return;
   }
   if(data === 'menu_toggle_pause'){
@@ -1100,6 +1159,26 @@ bot.onText(/^\/tahrirla\s+(\d+)\s+(\d+(?:[.,]\d+)?)$/, (msg, match) => {
   notifyStudentOfScore(id);
 });
 
+/* ---- /referal — do'st taklif qilish orqali bepul obuna ---- */
+const REFERRALS_PER_REWARD = 2;
+const REFERRAL_REWARD_TARIFF = 'premium_1m';
+bot.onText(/^\/referal$/, (msg) => handleReferral(msg.chat.id, msg.from.id));
+function handleReferral(chatId, fromId){
+  const data = store.load();
+  const user = data.users[String(fromId)];
+  const qualifiedCount = (user && user.referred_qualified) ? user.referred_qualified.length : 0;
+  const remaining = REFERRALS_PER_REWARD - (qualifiedCount % REFERRALS_PER_REWARD);
+  const link = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=ref${fromId}` : "Bot hali tayyor emas, birozdan so'ng urinib ko'ring.";
+  bot.sendMessage(chatId,
+    `🔗 <b>Do'stlaringizni taklif qiling!</b>\n\n` +
+    `Sizning shaxsiy havolangiz:\n<code>${link}</code>\n\n` +
+    `Do'stingiz shu havola orqali botga kirib, saytda birinchi Schreiben ishini yozib, AI orqali tekshirtirsa — hisoblanadi.\n\n` +
+    `Har <b>${REFERRALS_PER_REWARD} ta</b> faol do'stingiz uchun sizga <b>1 oy Premium BEPUL</b> beriladi! 🎁\n\n` +
+    `Hozircha qo'shilgan: <b>${qualifiedCount}</b> ta do'st (keyingi mukofotgacha yana ${remaining} ta kerak).`,
+    { parse_mode: 'HTML' }
+  );
+}
+
 /* ---- /premium — obuna sotib olish oqimi ---- */
 bot.onText(/^\/premium$/, (msg) => {
   const settings = getSettings();
@@ -1253,6 +1332,32 @@ app.post('/api/admin/settings', requireAdmin, (req, res) => {
     return data.settings;
   });
   res.json({ ok: true, settings: getSettings() });
+});
+
+/* ---- Admin xohishiga ko'ra istalgan foydalanuvchiga bepul (sovg'a) obuna berish ---- */
+app.post('/api/admin/grant-subscription', requireAdmin, async (req, res) => {
+  const { telegramId, tier, days } = req.body || {};
+  if(!telegramId || !/^\d+$/.test(String(telegramId))){
+    return res.status(400).json({ error: "telegramId raqam bo'lishi kerak" });
+  }
+  if(tier !== 'premium' && tier !== 'pro'){
+    return res.status(400).json({ error: "tier 'premium' yoki 'pro' bo'lishi kerak" });
+  }
+  const d = Number(days);
+  if(!Number.isFinite(d) || d <= 0 || d > 3650){
+    return res.status(400).json({ error: "days 1 dan 3650 gacha bo'lgan son bo'lishi kerak" });
+  }
+  const granted = extendSubscription(telegramId, tier, d);
+  res.json({ ok: true, granted });
+  try{
+    const expiryStr = new Date(granted.expiresAt).toLocaleDateString('uz-UZ');
+    await bot.sendMessage(Number(telegramId),
+      `🎁 Sizga admin tomonidan <b>${tier === 'pro' ? 'Pro' : 'Premium'}</b> obuna sovg'a qilindi!\nAmal qilish muddati: <b>${expiryStr}</b> gacha.`,
+      { parse_mode: 'HTML' }
+    );
+  }catch(err){
+    console.error(`sovg'a xabarini yuborishda xatolik (${telegramId}):`, err.message);
+  }
 });
 
 app.post('/api/admin/teachers', requireAdmin, async (req, res) => {

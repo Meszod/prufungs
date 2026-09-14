@@ -80,6 +80,20 @@
   </div>
 
   <div class="card">
+    <h2>🎁 Bepul obuna berish (sovg'a)</h2>
+    <p class="sub" style="margin:0 0 12px;">Istalgan foydalanuvchiga (Telegram ID orqali) o'zingiz xohlagancha bepul Premium/Pro obuna bering.</p>
+    <input type="text" id="giftTelegramIdInput" placeholder="Telegram ID">
+    <select id="giftTierSelect">
+      <option value="premium">Premium</option>
+      <option value="pro">Pro</option>
+    </select>
+    <input type="number" id="giftDaysInput" placeholder="Necha kunga (masalan 30)" value="30">
+    <button class="btn-primary" id="giftSubmitBtn">Berish</button>
+    <div class="err" id="giftErr"></div>
+    <div class="sub" id="giftSavedMsg" style="color:var(--accent); display:none; margin-top:8px;">✅ Berildi</div>
+  </div>
+
+  <div class="card">
     <h2>Yangi ustoz qo'shish</h2>
     <p class="sub" style="margin:0 0 12px;">Ustoz avval botga <b>/start</b> bosishi kerak — shundan keyin u pastdagi "Kutilayotganlar" ro'yxatida chiqadi.</p>
     <select id="candidateSelect"></select>
@@ -157,6 +171,30 @@
       setTimeout(()=> savedMsg.style.display = 'none', 2500);
     }catch(e){
       errEl.textContent = 'Saqlashda xatolik.';
+    }
+  });
+
+  document.getElementById('giftSubmitBtn').addEventListener('click', async ()=>{
+    const errEl = document.getElementById('giftErr');
+    const savedMsg = document.getElementById('giftSavedMsg');
+    errEl.textContent = '';
+    savedMsg.style.display = 'none';
+    const telegramId = document.getElementById('giftTelegramIdInput').value.trim();
+    const tier = document.getElementById('giftTierSelect').value;
+    const days = document.getElementById('giftDaysInput').value;
+    if(!telegramId || !/^\d+$/.test(telegramId)){ errEl.textContent = "Telegram ID faqat raqamlardan iborat bo'lishi kerak."; return; }
+    try{
+      const res = await fetch(API_BASE + '/api/admin/grant-subscription', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ telegramId, tier, days })
+      });
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent = data.error || 'Xatolik yuz berdi.'; return; }
+      savedMsg.textContent = `✅ Berildi — ${new Date(data.granted.expiresAt).toLocaleDateString('uz-UZ')} gacha`;
+      savedMsg.style.display = 'block';
+      document.getElementById('giftTelegramIdInput').value = '';
+      setTimeout(()=> savedMsg.style.display = 'none', 4000);
+    }catch(e){
+      errEl.textContent = 'Xatolik yuz berdi.';
     }
   });
 
