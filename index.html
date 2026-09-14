@@ -2088,6 +2088,12 @@
     setTimeout(()=> finishStamp.classList.remove('show'), 1800);
   }
   finishBtn.addEventListener('click', ()=>{
+    const cat = TASKS[currentCategory];
+    const wordCount = writingArea.value.trim().split(/\s+/).filter(Boolean).length;
+    if(cat.target && wordCount < cat.target * 0.3){
+      const proceed = confirm(`Matningiz juda qisqa (${wordCount} so'z, maqsad: ~${cat.target} so'z).\n\nBaribir yakunlaysizmi?`);
+      if(!proceed) return;
+    }
     pauseTimer();
     unlockFinishGatedButtons();
     showFinishStamp('FERTIG');
@@ -2286,6 +2292,7 @@ Matnni JUMLA-JUMLA tahlil qil va xuddi qog'ozga qizil qalam bilan belgilaydigan 
 Javobni FAQAT quyidagi formatdagi valid JSON obyekt sifatida ber, markdown kod bloksiz, hech qanday kirish so'zisiz:
 {
   "score": <0-100 oralig'idagi son>,
+  "isGermanText": <true agar matn asosan nemis tilida yozilgan bo'lsa, aks holda false>,
   "summary": "<2-3 gaplik umumiy fikr, o'zbek tilida>",
   "leitpunkte": [{"point": "<Leitpunkt nemis tilida>", "covered": <true/false>}],
   "issues": [{"wrong": "<o'quvchi matnidan olingan aniq, so'zma-so'z noto'g'ri parcha>", "right": "<to'g'irlangan versiya>", "note": "<qaysi grammatika qoidasi buzilgani, aniq va qisqa, o'zbek tilida — masalan: 'Akkusativ artikl xato (den o'rniga der)', 'Fe'l ikkinchi o'rinda kelishi kerak (so'z tartibi xatosi)', 'Bu predlog Dativ talab qiladi'>"}],
@@ -2332,15 +2339,22 @@ ${text}
         parsed = await callAI();
       }
 
-      // Zaxira tekshiruv: AI xato qilib, mazmunsiz/juda qisqa matnga yuqori ball bersa ham,
+      // Zaxira tekshiruv: AI xato qilib, mazmunsiz/juda qisqa/nemis tilida bo'lmagan matnga yuqori ball bersa ham,
       // bu yerda avtomatik tuzatiladi — AI'ga ishonib qolmaymiz.
       const wordCount = text.split(/\s+/).filter(Boolean).length;
       const targetWords = cat.target || 0;
+      let autoCorrected = false;
+      if(parsed.isGermanText === false && typeof parsed.score === 'number' && parsed.score > 10){
+        parsed.score = 10;
+        parsed.summary = `❌ Bu matn nemis tilida emasga o'xshaydi — iltimos, vazifani nemis tilida bajaring.\n\n${parsed.summary || ''}`;
+        autoCorrected = true;
+      }
       if(typeof parsed.score === 'number' && targetWords > 0 && wordCount < targetWords * 0.3){
         const cappedScore = Math.min(parsed.score, 15);
         if(cappedScore < parsed.score){
           parsed.score = cappedScore;
           parsed.summary = `⚠️ Matn juda qisqa (maqsad: ~${targetWords} so'z, siz: ${wordCount} so'z yozdingiz) — shu sababli ball avtomatik pasaytirildi.\n\n${parsed.summary || ''}`;
+          autoCorrected = true;
         }
       }
 
@@ -2355,7 +2369,7 @@ ${text}
         });
         if(statsPanel.style.display !== 'none') renderStatsPanel();
       }
-      sendSubmissionToTeacher(parsed, text);
+      sendSubmissionToTeacher(parsed, text, autoCorrected);
       lastCheckedText = text;
     }catch(err){
       feedbackPanel.innerHTML = `<div class="fb-error">Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.<br><span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">${(err && err.message) ? err.message : ''}</span></div>`;
@@ -2783,7 +2797,7 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
     return issues.map((it,i)=> `${i+1}. ❌ ${it.wrong || ''} → ✅ ${it.right || ''}${it.note ? ' (' + it.note + ')' : ''}`).join('\n');
   }
 
-  async function sendSubmissionToTeacher(parsed, text){
+  async function sendSubmissionToTeacher(parsed, text, autoCorrected){
     let name = getStudentName();
     let teacherKey = getStudentTeacherKey();
     const teachers = await fetchTeachersList();
@@ -2805,7 +2819,8 @@ Zielwortzahl: ca. ${cat.target} Wörter.`;
       text: text,
       wordCount: (text.trim().split(/\s+/).filter(Boolean)).length,
       aiScore: typeof parsed.score === 'number' ? parsed.score : '',
-      aiFeedback: feedbackText
+      aiFeedback: feedbackText,
+      autoCorrected: !!autoCorrected
     };
     try{
       await fetch(BOT_API_BASE + '/api/submit', {

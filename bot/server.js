@@ -213,7 +213,7 @@ function csvEscape(v){
   return `"${s.replace(/"/g, '""')}"`;
 }
 function toCSV(rows){
-  const header = ['ID', 'Sana', 'Talaba', 'Daraja/Bo\'lim', 'Toifa', 'Mavzu', 'Ball', 'Baholadi', 'Baholangan vaqt', 'Izoh'];
+  const header = ['ID', 'Sana', 'Talaba', 'Daraja/Bo\'lim', 'Toifa', 'Mavzu', 'Ball', 'Avtomatik tuzatildimi', 'Baholadi', 'Baholangan vaqt', 'Izoh'];
   // "sep=," — Excel'ga ustunlarni vergul bilan ajratishni majburlaydi. Ba'zi tillarda (shu jumladan
   // o'zbek/rus Windows sozlamalarida) Excel vergul o'rniga nuqta-vergulni kutadi va shu direktivasiz
   // butun qatorni bitta ustunga "yopishtirib" ochadi.
@@ -227,6 +227,7 @@ function toCSV(rows){
       r.category,
       r.task_title,
       r.final_score != null ? r.final_score : (r.ai_score || ''),
+      r.auto_corrected ? "⚠️ Ha" : '',
       r.graded_by || '',
       r.graded_at || '',
       r.teacher_comment || ''
@@ -604,7 +605,7 @@ app.post('/api/usage/check-and-consume', (req, res) => {
 /* ---- O'quvchi ishini yuborish: TANLANGAN ustozga + har doim adminga ---- */
 app.post('/api/submit', async (req, res) => {
   try{
-    const { studentName, studentTelegramId, teacherKey, level, category, taskTitle, text, wordCount, aiScore, aiFeedback } = req.body || {};
+    const { studentName, studentTelegramId, teacherKey, level, category, taskTitle, text, wordCount, aiScore, aiFeedback, autoCorrected } = req.body || {};
     if(!studentName || !text){
       return res.status(400).json({ error: "studentName va text majburiy" });
     }
@@ -637,6 +638,7 @@ app.post('/api/submit', async (req, res) => {
       word_count: wordCount || 0,
       ai_score: aiScore != null ? String(aiScore) : '',
       ai_feedback: aiFeedback || '',
+      auto_corrected: !!autoCorrected,
       final_score: null,
       graded_by: null,
       graded_by_id: null,
@@ -704,10 +706,37 @@ app.post('/api/submit', async (req, res) => {
       });
     }
 
+    // Suiiste'mol monitoringi: agar bitta o'quvchining oxirgi 3 ta ishi ham avtomatik tuzatilgan
+    // (juda qisqa/mazmunsiz) bo'lsa, admin va ustozga ogohlantirish yuboriladi (kuniga 1 martadan ko'p emas).
+    if(submission.auto_corrected && submission.student_telegram_id){
+      const abuseData = store.load();
+      const studentHistory = abuseData.submissions
+        .filter(s => String(s.student_telegram_id) === String(submission.student_telegram_id))
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const lastThree = studentHistory.slice(-3);
+      const allBad = lastThree.length >= 3 && lastThree.every(s => s.auto_corrected);
+      if(allBad){
+        const studentUser = abuseData.users[String(submission.student_telegram_id)];
+        const lastAlertAt = studentUser && studentUser.last_abuse_alert_at ? new Date(studentUser.last_abuse_alert_at).getTime() : 0;
+        if(Date.now() - lastAlertAt > 24 * 60 * 60 * 1000){
+          store.update((d) => {
+            const key = String(submission.student_telegram_id);
+            if(d.users[key]) d.users[key].last_abuse_alert_at = new Date().toISOString();
+          });
+          const alertText = `🚨 Diqqat: "${submission.student_name}" (ID: ${submission.student_telegram_id}) ketma-ket ${lastThree.length} marta juda qisqa/mazmunsiz matn yubordi. Bu haftalik bepul limitni suiiste'mol qilish urinishi bo'lishi mumkin.`;
+          if(ADMIN_TELEGRAM_ID) bot.sendMessage(Number(ADMIN_TELEGRAM_ID), alertText).catch((err) => console.error('abuse alert (admin) xatolik:', err.message));
+          if(targetTeacher && Number(targetTeacher.telegram_id) !== Number(ADMIN_TELEGRAM_ID || 0)){
+            bot.sendMessage(targetTeacher.telegram_id, alertText).catch((err) => console.error('abuse alert (teacher) xatolik:', err.message));
+          }
+        }
+      }
+    }
+
     const teacherLine = targetTeacher
       ? `\n👨‍🏫 Ustoz: ${targetTeacher.display_name}${targetTeacher.is_paused ? ' (⏸ band edi — faqat sizga yuborildi)' : ''}`
       : `\n👨‍🏫 Ustoz: tanlanmagan`;
-    const header = `📝 Yangi Schreiben ishi\n\n👤 ${submission.student_name}${teacherLine}\n📚 Daraja: ${(submission.level || '').toUpperCase()}${submission.category ? ' / ' + submission.category : ''}\n📌 Mavzu: ${submission.task_title || '-'}\n🔢 So'zlar soni: ${submission.word_count}`;
+    const warningLine = submission.auto_corrected ? `\n\n⚠️ DIQQAT: AI bali avtomatik pasaytirildi — matn juda qisqa yoki mazmunsiz bo'lgan, tizim buni aniqlab, ballni to'g'irladi. Iltimos, matnni o'zingiz ham ko'rib chiqing.` : '';
+    const header = `📝 Yangi Schreiben ishi${warningLine}\n\n👤 ${submission.student_name}${teacherLine}\n📚 Daraja: ${(submission.level || '').toUpperCase()}${submission.category ? ' / ' + submission.category : ''}\n📌 Mavzu: ${submission.task_title || '-'}\n🔢 So'zlar soni: ${submission.word_count}`;
     const scoreLine = submission.ai_score ? `\n⭐ AI bali: ${submission.ai_score}/100` : '';
     const feedbackBlock = submission.ai_feedback ? `\n\n🧾 AI tekshiruvi:\n${submission.ai_feedback}` : '';
     const textBlock = `\n\n✍️ Matn:\n${submission.text_content}`;
@@ -1271,7 +1300,8 @@ function handleJadval(chatId, fromId){
   const lines = graded.map(r => {
     const d = new Date(r.graded_at);
     const dateStr = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    return `${scoreEmoji(r.final_score)} ${dateStr} — ${r.student_name} — ${r.level}${r.category ? '/' + r.category : ''} — ${r.final_score}/100`;
+    const flag = r.auto_corrected ? ' ⚠️' : '';
+    return `${scoreEmoji(r.final_score)} ${dateStr} — ${r.student_name} — ${r.level}${r.category ? '/' + r.category : ''} — ${r.final_score}/100${flag}`;
   });
   bot.sendMessage(chatId, `📊 ${access.scope} — so'nggi baholangan ishlar:\n\n${lines.join('\n')}\n\nTo'liq jadval (Excel/CSV) uchun: /export`);
 }
