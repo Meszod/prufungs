@@ -284,6 +284,13 @@
   .sub-status-badge .upgrade-link{ color:var(--gold); font-weight:600; text-decoration:none; cursor:pointer; }
   .sub-status-badge .upgrade-link:hover{ text-decoration:underline; }
 
+  .ref-promo{
+    margin-top:16px; padding-top:14px; border-top:1px dashed var(--paper-line);
+    text-align:center; font-size:12.5px;
+  }
+  .ref-promo a{ color:var(--green); font-weight:600; text-decoration:none; }
+  .ref-promo a:hover{ text-decoration:underline; }
+
   /* ===== Layout grid ===== */
   .grid{ display:grid; grid-template-columns:1.05fr 1.35fr; gap:22px; align-items:start; }
   .task-col{ display:flex; flex-direction:column; }
@@ -1795,7 +1802,8 @@
           </ul>
           ${btn(proLink, '')}
         </div>
-      </div>`;
+      </div>
+      ${botLink ? `<div class="ref-promo"><a href="${botLink}?start=getref" target="_blank" rel="noopener">🎁 Yoki: 2 ta do'stingizni taklif qiling va Premium'ni <b>BEPUL</b> oling →</a></div>` : ''}`;
   }
 
   function openPricingModal(botLinkFallback){
@@ -1853,7 +1861,11 @@
           subStatusBadge.className = 'sub-status-badge';
           const used = sub.weeklyUsed != null ? sub.weeklyUsed : 0;
           const limit = sub.weeklyLimit || 3;
-          subStatusBadge.innerHTML = `Bepul reja — haftalik AI tekshiruv: <b>${used}/${limit}</b> ishlatilgan · <a href="#" class="upgrade-link" id="upgradeLinkInline">Premium olish →</a>`;
+          const refLink = sub.botLink ? `${sub.botLink}?start=getref` : null;
+          subStatusBadge.innerHTML =
+            `Bepul reja — haftalik AI tekshiruv: <b>${used}/${limit}</b> ishlatilgan · ` +
+            `<a href="#" class="upgrade-link" id="upgradeLinkInline">Premium olish →</a>` +
+            (refLink ? ` &nbsp;|&nbsp; 🎁 <a href="${refLink}" target="_blank" rel="noopener" class="upgrade-link">2 do'stingizni taklif qiling — Premium BEPUL oling →</a>` : '');
           const link = document.getElementById('upgradeLinkInline');
           if(link) link.addEventListener('click', (e) => { e.preventDefault(); openPricingModal(sub.botLink); });
         }

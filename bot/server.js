@@ -391,6 +391,11 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     return;
   }
 
+  if(payload === 'getref'){
+    handleReferral(chatId, msg.from.id);
+    return;
+  }
+
   if(payload && /^ref\d+$/.test(payload)){
     const referrerId = Number(payload.slice(3));
     if(referrerId !== msg.from.id){
