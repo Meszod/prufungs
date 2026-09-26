@@ -156,6 +156,8 @@ const pendingBroadcast = new Map();
 const pendingClear = new Map();
 /* To'lov jarayonida: chatId -> tariffKey (screenshot kutilmoqda) */
 const pendingPayment = new Map();
+/* /hammagabepul tasdiqlanishini kutayotgan holat: chatId -> {tier, days} */
+const pendingBulkGift = new Map();
 
 /* Admin panelga noto'g'ri parol bilan ko'p urinishlarni kuzatadi: ip -> {count, lockedUntil} */
 const loginAttempts = new Map();
@@ -1392,6 +1394,34 @@ app.post('/api/admin/grant-subscription', requireAdmin, async (req, res) => {
     );
   }catch(err){
     console.error(`sovg'a xabarini yuborishda xatolik (${telegramId}):`, err.message);
+  }
+});
+
+/* ---- Admin xohishiga ko'ra BARCHA o'quvchilarga bir vaqtda bepul Pro obuna berish + hammaga xabar ---- */
+app.post('/api/admin/grant-all', requireAdmin, async (req, res) => {
+  const { days } = req.body || {};
+  const d = Number(days);
+  if(!Number.isFinite(d) || d <= 0 || d > 3650){
+    return res.status(400).json({ error: "days 1 dan 3650 gacha bo'lgan son bo'lishi kerak" });
+  }
+  const data = store.load();
+  const students = Object.values(data.users).filter(u => u.role === 'student');
+  students.forEach(u => extendSubscription(u.telegram_id, 'pro', d));
+
+  // Bazaga yozish tezkor — shuni kutib javob qaytaramiz. Xabar yuborish (tarmoq so'rovlari) sekinroq,
+  // shuning uchun javobdan keyin orqa fonda davom etadi — admin panel HTTP so'rovi ortiqcha kutmaydi.
+  res.json({ ok: true, granted: students.length, days: d });
+
+  for(const u of students){
+    try{
+      await bot.sendMessage(u.telegram_id,
+        `🎁 Sizga sovg'a!\n\nBarcha foydalanuvchilarga — <b>${d} kunlik Pro</b> obuna BEPUL berildi!\nBarcha kitoblar va cheksiz AI tekshiruvdan bemalol foydalaning. 🚀`,
+        { parse_mode: 'HTML' }
+      );
+    }catch(err){
+      console.error(`hammaga sovg'a xabarida xatolik (${u.telegram_id}):`, err.message);
+    }
+    await new Promise((r) => setTimeout(r, 40)); // Telegram flood-limitidan qochish uchun kichik pauza
   }
 });
 

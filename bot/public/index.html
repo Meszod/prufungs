@@ -94,6 +94,15 @@
   </div>
 
   <div class="card">
+    <h2>🎉 Hammaga sovg'a qilish</h2>
+    <p class="sub" style="margin:0 0 12px;"><b>Barcha</b> o'quvchilarga bir vaqtning o'zida bepul <b>Pro</b> obuna beriladi va har biriga avtomatik xabar boradi. Kun sonini o'zingiz belgilaysiz.</p>
+    <input type="number" id="grantAllDaysInput" placeholder="Necha kun (masalan: 10)">
+    <button class="btn-primary" id="grantAllBtn">🎁 Hammaga Pro sovg'a qilish</button>
+    <div class="err" id="grantAllErr"></div>
+    <div class="sub" id="grantAllResult" style="color:var(--accent); display:none; margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
     <h2>Yangi ustoz qo'shish</h2>
     <p class="sub" style="margin:0 0 12px;">Ustoz avval botga <b>/start</b> bosishi kerak — shundan keyin u pastdagi "Kutilayotganlar" ro'yxatida chiqadi.</p>
     <select id="candidateSelect"></select>
@@ -195,6 +204,35 @@
       setTimeout(()=> savedMsg.style.display = 'none', 4000);
     }catch(e){
       errEl.textContent = 'Xatolik yuz berdi.';
+    }
+  });
+
+  document.getElementById('grantAllBtn').addEventListener('click', async ()=>{
+    const errEl = document.getElementById('grantAllErr');
+    const resultEl = document.getElementById('grantAllResult');
+    const btn = document.getElementById('grantAllBtn');
+    errEl.textContent = '';
+    resultEl.style.display = 'none';
+    const days = document.getElementById('grantAllDaysInput').value;
+    if(!days || Number(days) <= 0){ errEl.textContent = "Kun sonini kiriting."; return; }
+    if(!confirm(`DIQQAT: Barcha o'quvchilarga ${days} kunlik Pro obuna BEPUL beriladi va har biriga xabar yuboriladi.\n\nBu amalni ortga qaytarib bo'lmaydi. Davom etasizmi?`)) return;
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Berilmoqda...';
+    try{
+      const res = await fetch(API_BASE + '/api/admin/grant-all', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ days })
+      });
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent = data.error || 'Xatolik yuz berdi.'; return; }
+      resultEl.textContent = `✅ ${data.granted} ta o'quvchiga ${data.days} kunlik Pro obuna berildi. Xabarlar yuborilmoqda...`;
+      resultEl.style.display = 'block';
+      document.getElementById('grantAllDaysInput').value = '';
+    }catch(e){
+      errEl.textContent = 'Xatolik yuz berdi.';
+    }finally{
+      btn.disabled = false;
+      btn.textContent = originalText;
     }
   });
 
